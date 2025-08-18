@@ -14,7 +14,320 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          address: string
+          city: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_transporter: boolean | null
+          name: string
+          phone: string | null
+          state: string | null
+          updated_at: string
+          zip_code: string | null
+        }
+        Insert: {
+          address: string
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_transporter?: boolean | null
+          name: string
+          phone?: string | null
+          state?: string | null
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_transporter?: boolean | null
+          name?: string
+          phone?: string | null
+          state?: string | null
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      drivers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          license_number: string | null
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          license_number?: string | null
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          license_number?: string | null
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          expense_date: string
+          expense_type: string
+          id: string
+          receipt_url: string | null
+          route_id: string | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          expense_date: string
+          expense_type: string
+          id?: string
+          receipt_url?: string | null
+          route_id?: string | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          expense_date?: string
+          expense_type?: string
+          id?: string
+          receipt_url?: string | null
+          route_id?: string | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          driver_id: string | null
+          id: string
+          name: string
+          role: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          name: string
+          role?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          name?: string
+          role?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      route_stops: {
+        Row: {
+          completed: boolean | null
+          created_at: string
+          customer_id: string
+          delivery_time: string | null
+          id: string
+          notes: string | null
+          photos: string[] | null
+          route_id: string
+          signature_url: string | null
+          stop_number: number
+          updated_at: string
+        }
+        Insert: {
+          completed?: boolean | null
+          created_at?: string
+          customer_id: string
+          delivery_time?: string | null
+          id?: string
+          notes?: string | null
+          photos?: string[] | null
+          route_id: string
+          signature_url?: string | null
+          stop_number: number
+          updated_at?: string
+        }
+        Update: {
+          completed?: boolean | null
+          created_at?: string
+          customer_id?: string
+          delivery_time?: string | null
+          id?: string
+          notes?: string | null
+          photos?: string[] | null
+          route_id?: string
+          signature_url?: string | null
+          stop_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "route_stops_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "route_stops_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      routes: {
+        Row: {
+          created_at: string
+          departure_time: string | null
+          driver_id: string
+          final_km: number | null
+          id: string
+          initial_km: number | null
+          return_time: string | null
+          route_date: string
+          status: string | null
+          total_km: number | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          departure_time?: string | null
+          driver_id: string
+          final_km?: number | null
+          id?: string
+          initial_km?: number | null
+          return_time?: string | null
+          route_date: string
+          status?: string | null
+          total_km?: number | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          departure_time?: string | null
+          driver_id?: string
+          final_km?: number | null
+          id?: string
+          initial_km?: number | null
+          return_time?: string | null
+          route_date?: string
+          status?: string | null
+          total_km?: number | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routes_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "routes_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          brand: string | null
+          created_at: string
+          id: string
+          km_current: number | null
+          model: string | null
+          plate: string
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          km_current?: number | null
+          model?: string | null
+          plate: string
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          km_current?: number | null
+          model?: string | null
+          plate?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
