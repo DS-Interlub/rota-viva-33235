@@ -333,7 +333,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_driver_user: {
+        Args: {
+          driver_email: string
+          driver_name: string
+          driver_password: string
+          existing_driver_id?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
