@@ -10,6 +10,10 @@ import Auth from "./pages/Auth";
 import RoutesPage from "./pages/Routes";
 import Drivers from "./pages/Drivers";
 import Customers from "./pages/Customers";
+import Vehicles from "./pages/Vehicles";
+import Expenses from "./pages/Expenses";
+import Reports from "./pages/Reports";
+import DriverRoutes from "./pages/DriverRoutes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +32,10 @@ const App = () => (
               <Route path="routes" element={<RoutesPage />} />
               <Route path="drivers" element={<Drivers />} />
               <Route path="customers" element={<Customers />} />
+              <Route path="vehicles" element={<Vehicles />} />
+              <Route path="expenses" element={<Expenses />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="my-routes" element={<DriverRoutes />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             </Route>
             <Route path="*" element={<NotFound />} />

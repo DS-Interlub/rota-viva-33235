@@ -4,16 +4,28 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LogOut, Truck, Users, Map, BarChart, Settings } from 'lucide-react';
 
-const navigation = [
-  { name: 'Rotas', href: '/routes', icon: Map },
-  { name: 'Motoristas', href: '/drivers', icon: Truck },
-  { name: 'Clientes', href: '/customers', icon: Users },
-  { name: 'Relatórios', href: '/reports', icon: BarChart },
-  { name: 'Configurações', href: '/settings', icon: Settings },
-];
+const getNavigation = (userRole: string) => {
+  const adminNav = [
+    { name: 'Painel', href: '/', icon: BarChart },
+    { name: 'Rotas', href: '/routes', icon: Map },
+    { name: 'Motoristas', href: '/drivers', icon: Truck },
+    { name: 'Clientes', href: '/customers', icon: Users },
+    { name: 'Veículos', href: '/vehicles', icon: Truck },
+    { name: 'Despesas', href: '/expenses', icon: Settings },
+    { name: 'Relatórios', href: '/reports', icon: BarChart },
+  ];
+
+  const driverNav = [
+    { name: 'Minhas Rotas', href: '/my-routes', icon: Map },
+    { name: 'Painel', href: '/', icon: BarChart },
+  ];
+
+  return userRole === 'admin' ? adminNav : driverNav;
+};
 
 export default function Layout() {
   const { user, profile, loading, signOut } = useAuth();
+  const navigation = getNavigation(profile?.role || 'driver');
 
   if (loading) {
     return (
