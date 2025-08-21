@@ -14,6 +14,7 @@ import Vehicles from "./pages/Vehicles";
 import Expenses from "./pages/Expenses";
 import Reports from "./pages/Reports";
 import DriverRoutes from "./pages/DriverRoutes";
+import ManageDrivers from "./pages/ManageDrivers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
               <Route index element={<Dashboard />} />
               <Route path="routes" element={<RoutesPage />} />
               <Route path="drivers" element={<Drivers />} />
+              <Route path="manage-drivers" element={<ManageDrivers />} />
               <Route path="customers" element={<Customers />} />
               <Route path="vehicles" element={<Vehicles />} />
               <Route path="expenses" element={<Expenses />} />

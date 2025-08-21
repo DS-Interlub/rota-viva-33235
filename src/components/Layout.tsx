@@ -9,6 +9,7 @@ const getNavigation = (userRole: string) => {
     { name: 'Painel', href: '/', icon: BarChart },
     { name: 'Rotas', href: '/routes', icon: Map },
     { name: 'Motoristas', href: '/drivers', icon: Truck },
+    { name: 'Gerenciar Motoristas', href: '/manage-drivers', icon: Users },
     { name: 'Clientes', href: '/customers', icon: Users },
     { name: 'Veículos', href: '/vehicles', icon: Truck },
     { name: 'Despesas', href: '/expenses', icon: Settings },
