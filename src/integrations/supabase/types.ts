@@ -342,6 +342,10 @@ export type Database = {
         }
         Returns: Json
       }
+      create_first_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
