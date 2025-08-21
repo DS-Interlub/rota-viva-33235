@@ -2,14 +2,34 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Building, MapPin, Phone, Mail, Upload } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, Building, MapPin, Phone, Mail, Upload, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip_code: '',
+    phone: '',
+    email: '',
+    is_transporter: false
+  });
   const { toast } = useToast();
+  const { profile } = useAuth();
+
+  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     fetchCustomers();
@@ -36,6 +56,115 @@ export default function Customers() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!isAdmin) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem gerenciar clientes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (editingCustomer) {
+        const { error } = await supabase
+          .from('customers')
+          .update(formData)
+          .eq('id', editingCustomer.id);
+        
+        if (error) throw error;
+        toast({
+          title: "Sucesso",
+          description: "Cliente atualizado com sucesso!",
+        });
+      } else {
+        const { error } = await supabase
+          .from('customers')
+          .insert([formData]);
+        
+        if (error) throw error;
+        toast({
+          title: "Sucesso",
+          description: "Cliente cadastrado com sucesso!",
+        });
+      }
+
+      setIsDialogOpen(false);
+      setEditingCustomer(null);
+      setFormData({
+        name: '',
+        address: '',
+        city: '',
+        state: '',
+        zip_code: '',
+        phone: '',
+        email: '',
+        is_transporter: false
+      });
+      fetchCustomers();
+    } catch (error) {
+      console.error('Erro ao salvar cliente:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar cliente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEdit = (customer: any) => {
+    setEditingCustomer(customer);
+    setFormData({
+      name: customer.name,
+      address: customer.address,
+      city: customer.city || '',
+      state: customer.state || '',
+      zip_code: customer.zip_code || '',
+      phone: customer.phone || '',
+      email: customer.email || '',
+      is_transporter: customer.is_transporter || false
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem excluir clientes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Sucesso",
+        description: "Cliente excluído com sucesso!",
+      });
+      fetchCustomers();
+    } catch (error) {
+      console.error('Erro ao excluir cliente:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir cliente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center p-8">Carregando clientes...</div>;
   }
@@ -54,10 +183,110 @@ export default function Customers() {
             <Upload className="h-4 w-4 mr-2" />
             Importar Excel
           </Button>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Cliente
-          </Button>
+          {isAdmin && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => {
+                  setEditingCustomer(null);
+                  setFormData({
+                    name: '',
+                    address: '',
+                    city: '',
+                    state: '',
+                    zip_code: '',
+                    phone: '',
+                    email: '',
+                    is_transporter: false
+                  });
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Cliente
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
+                  <DialogDescription>
+                    {editingCustomer ? 'Edite as informações do cliente' : 'Cadastre um novo cliente'}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="name">Nome *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="address">Endereço *</Label>
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="city">Cidade</Label>
+                      <Input
+                        id="city"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="state">Estado</Label>
+                      <Input
+                        id="state"
+                        value={formData.state}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="zip_code">CEP</Label>
+                    <Input
+                      id="zip_code"
+                      value={formData.zip_code}
+                      onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Telefone</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">E-mail</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="is_transporter"
+                      checked={formData.is_transporter}
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_transporter: checked })}
+                    />
+                    <Label htmlFor="is_transporter">É transportadora</Label>
+                  </div>
+                  <Button type="submit" className="w-full">
+                    {editingCustomer ? 'Atualizar' : 'Cadastrar'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -74,10 +303,12 @@ export default function Customers() {
                 <Upload className="h-4 w-4 mr-2" />
                 Importar Excel
               </Button>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Cadastrar primeiro cliente
-              </Button>
+              {isAdmin && (
+                <Button onClick={() => setIsDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Cadastrar primeiro cliente
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -118,9 +349,18 @@ export default function Customers() {
                 )}
                 
                 <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    Editar
-                  </Button>
+                  {isAdmin && (
+                    <>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(customer)}>
+                        <Edit2 className="h-3 w-3 mr-1" />
+                        Editar
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDelete(customer.id)}>
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Excluir
+                      </Button>
+                    </>
+                  )}
                   <Button variant="outline" size="sm" className="flex-1">
                     Ver Entregas
                   </Button>

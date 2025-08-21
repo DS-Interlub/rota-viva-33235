@@ -2,14 +2,29 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, User, Phone, Mail } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, User, Phone, Mail, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    license_number: ''
+  });
   const { toast } = useToast();
+  const { profile } = useAuth();
+
+  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     fetchDrivers();
@@ -36,6 +51,107 @@ export default function Drivers() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!isAdmin) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem gerenciar motoristas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (editingDriver) {
+        const { error } = await supabase
+          .from('drivers')
+          .update(formData)
+          .eq('id', editingDriver.id);
+        
+        if (error) throw error;
+        toast({
+          title: "Sucesso",
+          description: "Motorista atualizado com sucesso!",
+        });
+      } else {
+        const { error } = await supabase
+          .from('drivers')
+          .insert([formData]);
+        
+        if (error) throw error;
+        toast({
+          title: "Sucesso",
+          description: "Motorista cadastrado com sucesso!",
+        });
+      }
+
+      setIsDialogOpen(false);
+      setEditingDriver(null);
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        license_number: ''
+      });
+      fetchDrivers();
+    } catch (error) {
+      console.error('Erro ao salvar motorista:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar motorista.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEdit = (driver: any) => {
+    setEditingDriver(driver);
+    setFormData({
+      name: driver.name,
+      email: driver.email || '',
+      phone: driver.phone || '',
+      license_number: driver.license_number || ''
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem excluir motoristas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!confirm('Tem certeza que deseja excluir este motorista?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('drivers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Sucesso",
+        description: "Motorista excluído com sucesso!",
+      });
+      fetchDrivers();
+    } catch (error) {
+      console.error('Erro ao excluir motorista:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir motorista.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center p-8">Carregando motoristas...</div>;
   }
@@ -49,10 +165,71 @@ export default function Drivers() {
             Gerencie os motoristas da sua equipe
           </p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Motorista
-        </Button>
+        {isAdmin && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => {
+                setEditingDriver(null);
+                setFormData({
+                  name: '',
+                  email: '',
+                  phone: '',
+                  license_number: ''
+                });
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Motorista
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingDriver ? 'Editar Motorista' : 'Novo Motorista'}</DialogTitle>
+                <DialogDescription>
+                  {editingDriver ? 'Edite as informações do motorista' : 'Cadastre um novo motorista'}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Nome *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="phone">Telefone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="license_number">Número da CNH</Label>
+                  <Input
+                    id="license_number"
+                    value={formData.license_number}
+                    onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                  />
+                </div>
+                <Button type="submit" className="w-full">
+                  {editingDriver ? 'Atualizar' : 'Cadastrar'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {drivers.length === 0 ? (
@@ -63,10 +240,12 @@ export default function Drivers() {
             <p className="text-muted-foreground text-center mb-4">
               Comece adicionando o primeiro motorista à sua equipe
             </p>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Cadastrar primeiro motorista
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => setIsDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Cadastrar primeiro motorista
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -98,9 +277,18 @@ export default function Drivers() {
                 )}
                 
                 <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    Editar
-                  </Button>
+                  {isAdmin && (
+                    <>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(driver)}>
+                        <Edit2 className="h-3 w-3 mr-1" />
+                        Editar
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDelete(driver.id)}>
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Excluir
+                      </Button>
+                    </>
+                  )}
                   <Button variant="outline" size="sm" className="flex-1">
                     Ver Rotas
                   </Button>
