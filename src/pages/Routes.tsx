@@ -23,10 +23,6 @@ export default function Routes() {
     driver_id: '',
     vehicle_id: '',
     route_date: '',
-    departure_time: '',
-    return_time: '',
-    initial_km: '',
-    final_km: '',
     selectedCustomers: []
   });
   const [optimizedRoute, setOptimizedRoute] = useState([]);
@@ -93,10 +89,6 @@ export default function Routes() {
         driver_id: formData.driver_id,
         vehicle_id: formData.vehicle_id,
         route_date: formData.route_date,
-        departure_time: formData.departure_time || null,
-        return_time: formData.return_time || null,
-        initial_km: formData.initial_km ? parseInt(formData.initial_km) : null,
-        final_km: formData.final_km ? parseInt(formData.final_km) : null,
       };
 
       let routeId;
@@ -151,10 +143,6 @@ export default function Routes() {
         driver_id: '',
         vehicle_id: '',
         route_date: '',
-        departure_time: '',
-        return_time: '',
-        initial_km: '',
-        final_km: '',
         selectedCustomers: []
       });
       fetchData();
@@ -174,10 +162,6 @@ export default function Routes() {
       driver_id: route.driver_id,
       vehicle_id: route.vehicle_id,
       route_date: route.route_date,
-      departure_time: route.departure_time || '',
-      return_time: route.return_time || '',
-      initial_km: route.initial_km?.toString() || '',
-      final_km: route.final_km?.toString() || '',
       selectedCustomers: route.route_stops?.map((stop: any) => stop.customer_id) || []
     });
     setIsDialogOpen(true);
@@ -313,10 +297,6 @@ export default function Routes() {
           driver_id: division.driver_id,
           vehicle_id: formData.vehicle_id,
           route_date: formData.route_date,
-          departure_time: formData.departure_time || null,
-          return_time: formData.return_time || null,
-          initial_km: formData.initial_km ? parseInt(formData.initial_km) : null,
-          final_km: formData.final_km ? parseInt(formData.final_km) : null,
         };
 
         const { data: newRoute, error } = await supabase
@@ -351,16 +331,12 @@ export default function Routes() {
       setIsDialogOpen(false);
       setOptimizedRoute([]);
       setRouteDivisions([]);
-      setFormData({
-        driver_id: '',
-        vehicle_id: '',
-        route_date: '',
-        departure_time: '',
-        return_time: '',
-        initial_km: '',
-        final_km: '',
-        selectedCustomers: []
-      });
+        setFormData({
+          driver_id: '',
+          vehicle_id: '',
+          route_date: '',
+          selectedCustomers: []
+        });
       fetchData();
     } catch (error) {
       console.error('Erro ao criar rotas divididas:', error);
@@ -405,10 +381,6 @@ export default function Routes() {
                   driver_id: '',
                   vehicle_id: '',
                   route_date: '',
-                  departure_time: '',
-                  return_time: '',
-                  initial_km: '',
-                  final_km: '',
                   selectedCustomers: []
                 });
               }}>
@@ -457,56 +429,15 @@ export default function Routes() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="route_date">Data da Rota *</Label>
-                    <Input
-                      id="route_date"
-                      type="date"
-                      value={formData.route_date}
-                      onChange={(e) => setFormData({ ...formData, route_date: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="departure_time">Horário de Saída</Label>
-                    <Input
-                      id="departure_time"
-                      type="time"
-                      value={formData.departure_time}
-                      onChange={(e) => setFormData({ ...formData, departure_time: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="return_time">Horário de Retorno</Label>
-                    <Input
-                      id="return_time"
-                      type="time"
-                      value={formData.return_time}
-                      onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="initial_km">KM Inicial</Label>
-                    <Input
-                      id="initial_km"
-                      type="number"
-                      value={formData.initial_km}
-                      onChange={(e) => setFormData({ ...formData, initial_km: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="final_km">KM Final</Label>
-                    <Input
-                      id="final_km"
-                      type="number"
-                      value={formData.final_km}
-                      onChange={(e) => setFormData({ ...formData, final_km: e.target.value })}
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="route_date">Data da Rota *</Label>
+                  <Input
+                    id="route_date"
+                    type="date"
+                    value={formData.route_date}
+                    onChange={(e) => setFormData({ ...formData, route_date: e.target.value })}
+                    required
+                  />
                 </div>
 
                 {!editingRoute && (

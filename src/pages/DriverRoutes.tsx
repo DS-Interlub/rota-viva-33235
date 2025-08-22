@@ -22,6 +22,11 @@ export default function DriverRoutes() {
     photos: [],
     signature_url: ''
   });
+  const [isKmDialogOpen, setIsKmDialogOpen] = useState(false);
+  const [kmFormData, setKmFormData] = useState({
+    initial_km: '',
+    final_km: ''
+  });
   const { toast } = useToast();
   const { profile, user } = useAuth();
 
@@ -64,15 +69,34 @@ export default function DriverRoutes() {
     }
   };
 
-  const startRoute = async (routeId: string) => {
+  const openKmDialog = (route: any, action: 'start' | 'complete') => {
+    setSelectedRoute(route);
+    setKmFormData({
+      initial_km: route.initial_km?.toString() || '',
+      final_km: route.final_km?.toString() || ''
+    });
+    setIsKmDialogOpen(true);
+  };
+
+  const startRoute = async () => {
+    if (!selectedRoute || !kmFormData.initial_km) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe o KM inicial do veículo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('routes')
         .update({ 
           status: 'in_progress',
-          departure_time: new Date().toTimeString().slice(0, 8)
+          departure_time: new Date().toTimeString().slice(0, 8),
+          initial_km: parseInt(kmFormData.initial_km)
         })
-        .eq('id', routeId);
+        .eq('id', selectedRoute.id);
 
       if (error) throw error;
       
@@ -80,6 +104,7 @@ export default function DriverRoutes() {
         title: "Rota iniciada",
         description: "Boa viagem! Lembre-se de marcar as entregas conforme forem sendo concluídas.",
       });
+      setIsKmDialogOpen(false);
       fetchDriverRoutes();
     } catch (error) {
       console.error('Erro ao iniciar rota:', error);
@@ -91,15 +116,30 @@ export default function DriverRoutes() {
     }
   };
 
-  const completeRoute = async (routeId: string) => {
+  const completeRoute = async () => {
+    if (!selectedRoute || !kmFormData.final_km) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe o KM final do veículo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
+      const finalKm = parseInt(kmFormData.final_km);
+      const initialKm = parseInt(kmFormData.initial_km) || selectedRoute.initial_km || 0;
+      const totalKm = finalKm - initialKm;
+
       const { error } = await supabase
         .from('routes')
         .update({ 
           status: 'completed',
-          return_time: new Date().toTimeString().slice(0, 8)
+          return_time: new Date().toTimeString().slice(0, 8),
+          final_km: finalKm,
+          total_km: totalKm > 0 ? totalKm : null
         })
-        .eq('id', routeId);
+        .eq('id', selectedRoute.id);
 
       if (error) throw error;
       
@@ -107,6 +147,7 @@ export default function DriverRoutes() {
         title: "Rota concluída",
         description: "Parabéns! Rota finalizada com sucesso.",
       });
+      setIsKmDialogOpen(false);
       fetchDriverRoutes();
     } catch (error) {
       console.error('Erro ao concluir rota:', error);
@@ -226,13 +267,13 @@ export default function DriverRoutes() {
                   </div>
                   <div className="flex gap-2">
                     {route.status === 'pending' && (
-                      <Button size="sm" onClick={() => startRoute(route.id)}>
+                      <Button size="sm" onClick={() => openKmDialog(route, 'start')}>
                         <Play className="h-4 w-4 mr-1" />
                         Iniciar
                       </Button>
                     )}
                     {route.status === 'in_progress' && (
-                      <Button size="sm" variant="outline" onClick={() => completeRoute(route.id)}>
+                      <Button size="sm" variant="outline" onClick={() => openKmDialog(route, 'complete')}>
                         <Square className="h-4 w-4 mr-1" />
                         Finalizar
                       </Button>
@@ -242,12 +283,16 @@ export default function DriverRoutes() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <strong>Saída:</strong> {route.departure_time || 'Não definido'}
                     </div>
                     <div>
                       <strong>Retorno:</strong> {route.return_time || 'Não definido'}
+                    </div>
+                    <div>
+                      <strong>KM:</strong> {route.initial_km || 'Não definido'} - {route.final_km || 'Não definido'} 
+                      {route.total_km && ` (${route.total_km} km)`}
                     </div>
                     <div>
                       <strong>Entregas:</strong> {route.route_stops?.filter((stop: any) => stop.completed).length || 0} de {route.route_stops?.length || 0}
@@ -339,6 +384,80 @@ export default function DriverRoutes() {
             <Button onClick={completeStop} className="w-full">
               <CheckCircle className="h-4 w-4 mr-2" />
               Confirmar Entrega
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* KM Input Dialog */}
+      <Dialog open={isKmDialogOpen} onOpenChange={setIsKmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedRoute?.status === 'pending' ? 'Iniciar Rota' : 'Finalizar Rota'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedRoute?.status === 'pending' 
+                ? 'Informe o KM inicial do veículo para iniciar a rota'
+                : 'Informe o KM final do veículo para finalizar a rota'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedRoute?.status === 'pending' && (
+              <div>
+                <Label htmlFor="initial_km">KM Inicial *</Label>
+                <Input
+                  id="initial_km"
+                  type="number"
+                  value={kmFormData.initial_km}
+                  onChange={(e) => setKmFormData({ ...kmFormData, initial_km: e.target.value })}
+                  placeholder="Digite o KM inicial do veículo"
+                  required
+                />
+              </div>
+            )}
+            
+            {selectedRoute?.status === 'in_progress' && (
+              <>
+                <div>
+                  <Label htmlFor="initial_km_display">KM Inicial</Label>
+                  <Input
+                    id="initial_km_display"
+                    type="number"
+                    value={selectedRoute?.initial_km || ''}
+                    disabled
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="final_km">KM Final *</Label>
+                  <Input
+                    id="final_km"
+                    type="number"
+                    value={kmFormData.final_km}
+                    onChange={(e) => setKmFormData({ ...kmFormData, final_km: e.target.value })}
+                    placeholder="Digite o KM final do veículo"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            <Button 
+              onClick={selectedRoute?.status === 'pending' ? startRoute : completeRoute} 
+              className="w-full"
+            >
+              {selectedRoute?.status === 'pending' ? (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Iniciar Rota
+                </>
+              ) : (
+                <>
+                  <Square className="h-4 w-4 mr-2" />
+                  Finalizar Rota
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
