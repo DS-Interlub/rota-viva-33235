@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2 } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +29,9 @@ export default function Routes() {
     final_km: '',
     selectedCustomers: []
   });
+  const [optimizedRoute, setOptimizedRoute] = useState([]);
+  const [showDivideDialog, setShowDivideDialog] = useState(false);
+  const [routeDivisions, setRouteDivisions] = useState([]);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -215,6 +218,160 @@ export default function Routes() {
     }
   };
 
+  const optimizeRoute = () => {
+    if (formData.selectedCustomers.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos um cliente para otimizar a rota.",
+        variant: "default",
+      });
+      return;
+    }
+
+    // Otimização simples: ordenar por cidade e endereço
+    const selectedCustomersData = customers.filter(customer => 
+      formData.selectedCustomers.includes(customer.id)
+    );
+
+    const optimized = [...selectedCustomersData].sort((a, b) => {
+      // Ordenar primeiro por cidade (assumindo que está no endereço)
+      const cityA = a.address.split(',').slice(-2)[0]?.trim() || '';
+      const cityB = b.address.split(',').slice(-2)[0]?.trim() || '';
+      
+      if (cityA !== cityB) {
+        return cityA.localeCompare(cityB);
+      }
+      
+      // Se mesma cidade, ordenar por nome do cliente
+      return a.name.localeCompare(b.name);
+    });
+
+    setOptimizedRoute(optimized);
+    
+    // Atualizar a ordem dos clientes selecionados
+    setFormData({
+      ...formData,
+      selectedCustomers: optimized.map(c => c.id)
+    });
+
+    toast({
+      title: "Sucesso",
+      description: `Rota otimizada com ${optimized.length} paradas!`,
+    });
+  };
+
+  const divideRoute = () => {
+    if (optimizedRoute.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Primeiro otimize a rota antes de dividir entre motoristas.",
+        variant: "default",
+      });
+      return;
+    }
+
+    // Dividir a rota automaticamente entre os motoristas disponíveis
+    const availableDrivers = drivers.length;
+    const stopsPerDriver = Math.ceil(optimizedRoute.length / availableDrivers);
+    
+    const divisions = [];
+    for (let i = 0; i < availableDrivers && i * stopsPerDriver < optimizedRoute.length; i++) {
+      const driverStops = optimizedRoute.slice(
+        i * stopsPerDriver, 
+        (i + 1) * stopsPerDriver
+      );
+      
+      if (driverStops.length > 0) {
+        divisions.push({
+          driver_id: drivers[i]?.id || '',
+          driver_name: drivers[i]?.name || '',
+          stops: driverStops,
+          stopCount: driverStops.length
+        });
+      }
+    }
+    
+    setRouteDivisions(divisions);
+    setShowDivideDialog(true);
+  };
+
+  const createDividedRoutes = async () => {
+    if (!formData.vehicle_id || !formData.route_date) {
+      toast({
+        title: "Erro",
+        description: "Selecione um veículo e data antes de criar as rotas divididas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      for (const division of routeDivisions) {
+        if (!division.driver_id || division.stops.length === 0) continue;
+
+        const routeData = {
+          driver_id: division.driver_id,
+          vehicle_id: formData.vehicle_id,
+          route_date: formData.route_date,
+          departure_time: formData.departure_time || null,
+          return_time: formData.return_time || null,
+          initial_km: formData.initial_km ? parseInt(formData.initial_km) : null,
+          final_km: formData.final_km ? parseInt(formData.final_km) : null,
+        };
+
+        const { data: newRoute, error } = await supabase
+          .from('routes')
+          .insert([routeData])
+          .select()
+          .single();
+        
+        if (error) throw error;
+
+        // Criar paradas para esta divisão
+        const stops = division.stops.map((customer: any, index: number) => ({
+          route_id: newRoute.id,
+          customer_id: customer.id,
+          stop_number: index + 1,
+          completed: false
+        }));
+
+        const { error: stopsError } = await supabase
+          .from('route_stops')
+          .insert(stops);
+
+        if (stopsError) throw stopsError;
+      }
+
+      toast({
+        title: "Sucesso",
+        description: `${routeDivisions.length} rotas criadas com sucesso!`,
+      });
+
+      setShowDivideDialog(false);
+      setIsDialogOpen(false);
+      setOptimizedRoute([]);
+      setRouteDivisions([]);
+      setFormData({
+        driver_id: '',
+        vehicle_id: '',
+        route_date: '',
+        departure_time: '',
+        return_time: '',
+        initial_km: '',
+        final_km: '',
+        selectedCustomers: []
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Erro ao criar rotas divididas:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao criar rotas divididas.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusMap = {
       pending: { label: 'Pendente', variant: 'outline' as const },
@@ -353,35 +510,73 @@ export default function Routes() {
                 </div>
 
                 {!editingRoute && (
-                  <div>
-                    <Label>Clientes para Entrega</Label>
-                    <div className="border rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
-                      {customers.map((customer: any) => (
-                        <div key={customer.id} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`customer-${customer.id}`}
-                            checked={formData.selectedCustomers.includes(customer.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({
-                                  ...formData,
-                                  selectedCustomers: [...formData.selectedCustomers, customer.id]
-                                });
-                              } else {
-                                setFormData({
-                                  ...formData,
-                                  selectedCustomers: formData.selectedCustomers.filter(id => id !== customer.id)
-                                });
-                              }
-                            }}
-                          />
-                          <label htmlFor={`customer-${customer.id}`} className="text-sm">
-                            {customer.name} - {customer.address}
-                          </label>
-                        </div>
-                      ))}
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Clientes para Entrega</Label>
+                      <div className="border rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
+                        {optimizedRoute.length > 0 ? (
+                          optimizedRoute.map((customer: any, index) => (
+                            <div key={customer.id} className="flex items-center space-x-2 bg-green-50 p-2 rounded">
+                              <span className="font-semibold text-green-600">{index + 1}.</span>
+                              <span className="text-sm">
+                                {customer.name} - {customer.address}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          customers.map((customer: any) => (
+                            <div key={customer.id} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`customer-${customer.id}`}
+                                checked={formData.selectedCustomers.includes(customer.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({
+                                      ...formData,
+                                      selectedCustomers: [...formData.selectedCustomers, customer.id]
+                                    });
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      selectedCustomers: formData.selectedCustomers.filter(id => id !== customer.id)
+                                    });
+                                  }
+                                }}
+                              />
+                              <label htmlFor={`customer-${customer.id}`} className="text-sm">
+                                {customer.name} - {customer.address}
+                              </label>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
+                    
+                    {formData.selectedCustomers.length > 0 && (
+                      <div className="flex gap-2">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={optimizeRoute}
+                          className="flex-1"
+                        >
+                          <Route className="h-4 w-4 mr-2" />
+                          Otimizar Rota
+                        </Button>
+                        {optimizedRoute.length > 1 && (
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={divideRoute}
+                            className="flex-1"
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Dividir entre Motoristas
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -393,6 +588,57 @@ export default function Routes() {
           </Dialog>
         )}
       </div>
+
+      {/* Dialog para dividir rotas */}
+      <Dialog open={showDivideDialog} onOpenChange={setShowDivideDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dividir Rota entre Motoristas</DialogTitle>
+            <DialogDescription>
+              O sistema dividiu automaticamente as {optimizedRoute.length} paradas entre {routeDivisions.length} motoristas
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {routeDivisions.map((division: any, index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Motorista: {division.driver_name}
+                  </CardTitle>
+                  <CardDescription>
+                    {division.stopCount} paradas atribuídas
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {division.stops.map((customer: any, stopIndex: number) => (
+                      <div key={customer.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                        <span className="font-semibold text-blue-600">
+                          {stopIndex + 1}.
+                        </span>
+                        <div>
+                          <p className="font-medium">{customer.name}</p>
+                          <p className="text-sm text-muted-foreground">{customer.address}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowDivideDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={createDividedRoutes}>
+              Criar {routeDivisions.length} Rotas
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {routes.length === 0 ? (
         <Card>
