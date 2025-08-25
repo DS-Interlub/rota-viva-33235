@@ -180,39 +180,54 @@ export type Database = {
       }
       route_stops: {
         Row: {
+          arrival_time: string | null
           completed: boolean | null
           created_at: string
           customer_id: string
           delivery_time: string | null
+          departure_time: string | null
           id: string
           notes: string | null
           photos: string[] | null
+          receiver_department: string | null
+          receiver_email: string | null
+          receiver_name: string | null
           route_id: string
           signature_url: string | null
           stop_number: number
           updated_at: string
         }
         Insert: {
+          arrival_time?: string | null
           completed?: boolean | null
           created_at?: string
           customer_id: string
           delivery_time?: string | null
+          departure_time?: string | null
           id?: string
           notes?: string | null
           photos?: string[] | null
+          receiver_department?: string | null
+          receiver_email?: string | null
+          receiver_name?: string | null
           route_id: string
           signature_url?: string | null
           stop_number: number
           updated_at?: string
         }
         Update: {
+          arrival_time?: string | null
           completed?: boolean | null
           created_at?: string
           customer_id?: string
           delivery_time?: string | null
+          departure_time?: string | null
           id?: string
           notes?: string | null
           photos?: string[] | null
+          receiver_department?: string | null
+          receiver_email?: string | null
+          receiver_name?: string | null
           route_id?: string
           signature_url?: string | null
           stop_number?: number
@@ -237,6 +252,8 @@ export type Database = {
       }
       routes: {
         Row: {
+          base_arrival_time: string | null
+          base_departure_time: string | null
           created_at: string
           departure_time: string | null
           driver_id: string
@@ -251,6 +268,8 @@ export type Database = {
           vehicle_id: string
         }
         Insert: {
+          base_arrival_time?: string | null
+          base_departure_time?: string | null
           created_at?: string
           departure_time?: string | null
           driver_id: string
@@ -265,6 +284,8 @@ export type Database = {
           vehicle_id: string
         }
         Update: {
+          base_arrival_time?: string | null
+          base_departure_time?: string | null
           created_at?: string
           departure_time?: string | null
           driver_id?: string

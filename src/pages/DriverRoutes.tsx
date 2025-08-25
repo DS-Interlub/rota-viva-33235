@@ -20,12 +20,19 @@ export default function DriverRoutes() {
   const [stopFormData, setStopFormData] = useState({
     notes: '',
     photos: [],
-    signature_url: ''
+    signature_url: '',
+    arrival_time: '',
+    departure_time: '',
+    receiver_name: '',
+    receiver_email: '',
+    receiver_department: ''
   });
   const [isKmDialogOpen, setIsKmDialogOpen] = useState(false);
   const [kmFormData, setKmFormData] = useState({
     initial_km: '',
-    final_km: ''
+    final_km: '',
+    base_departure_time: '',
+    base_arrival_time: ''
   });
   const { toast } = useToast();
   const { profile, user } = useAuth();
@@ -73,16 +80,18 @@ export default function DriverRoutes() {
     setSelectedRoute(route);
     setKmFormData({
       initial_km: route.initial_km?.toString() || '',
-      final_km: route.final_km?.toString() || ''
+      final_km: route.final_km?.toString() || '',
+      base_departure_time: route.base_departure_time || '',
+      base_arrival_time: route.base_arrival_time || ''
     });
     setIsKmDialogOpen(true);
   };
 
   const startRoute = async () => {
-    if (!selectedRoute || !kmFormData.initial_km) {
+    if (!selectedRoute || !kmFormData.initial_km || !kmFormData.base_departure_time) {
       toast({
         title: "Erro",
-        description: "Por favor, informe o KM inicial do veículo.",
+        description: "Por favor, informe o KM inicial e horário de saída da base.",
         variant: "destructive",
       });
       return;
@@ -93,8 +102,8 @@ export default function DriverRoutes() {
         .from('routes')
         .update({ 
           status: 'in_progress',
-          departure_time: new Date().toTimeString().slice(0, 8),
-          initial_km: parseInt(kmFormData.initial_km)
+          initial_km: parseInt(kmFormData.initial_km),
+          base_departure_time: kmFormData.base_departure_time
         })
         .eq('id', selectedRoute.id);
 
@@ -117,10 +126,10 @@ export default function DriverRoutes() {
   };
 
   const completeRoute = async () => {
-    if (!selectedRoute || !kmFormData.final_km) {
+    if (!selectedRoute || !kmFormData.final_km || !kmFormData.base_arrival_time) {
       toast({
         title: "Erro",
-        description: "Por favor, informe o KM final do veículo.",
+        description: "Por favor, informe o KM final e horário de chegada na base.",
         variant: "destructive",
       });
       return;
@@ -135,9 +144,9 @@ export default function DriverRoutes() {
         .from('routes')
         .update({ 
           status: 'completed',
-          return_time: new Date().toTimeString().slice(0, 8),
           final_km: finalKm,
-          total_km: totalKm > 0 ? totalKm : null
+          total_km: totalKm > 0 ? totalKm : null,
+          base_arrival_time: kmFormData.base_arrival_time
         })
         .eq('id', selectedRoute.id);
 
@@ -165,13 +174,25 @@ export default function DriverRoutes() {
     setStopFormData({
       notes: stop.notes || '',
       photos: stop.photos || [],
-      signature_url: stop.signature_url || ''
+      signature_url: stop.signature_url || '',
+      arrival_time: stop.arrival_time || '',
+      departure_time: stop.departure_time || '',
+      receiver_name: stop.receiver_name || '',
+      receiver_email: stop.receiver_email || '',
+      receiver_department: stop.receiver_department || ''
     });
     setIsStopDialogOpen(true);
   };
 
   const completeStop = async () => {
-    if (!selectedStop || !selectedRoute) return;
+    if (!selectedStop || !selectedRoute || !stopFormData.arrival_time || !stopFormData.departure_time || !stopFormData.receiver_name) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha horário de chegada, saída e nome do responsável.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -181,7 +202,12 @@ export default function DriverRoutes() {
           notes: stopFormData.notes,
           photos: stopFormData.photos,
           signature_url: stopFormData.signature_url,
-          delivery_time: new Date().toTimeString().slice(0, 8)
+          arrival_time: stopFormData.arrival_time,
+          departure_time: stopFormData.departure_time,
+          receiver_name: stopFormData.receiver_name,
+          receiver_email: stopFormData.receiver_email,
+          receiver_department: stopFormData.receiver_department,
+          delivery_time: stopFormData.departure_time
         })
         .eq('id', selectedStop.id);
 
@@ -285,10 +311,10 @@ export default function DriverRoutes() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <strong>Saída:</strong> {route.departure_time || 'Não definido'}
+                      <strong>Saída da Base:</strong> {route.base_departure_time || 'Não definido'}
                     </div>
                     <div>
-                      <strong>Retorno:</strong> {route.return_time || 'Não definido'}
+                      <strong>Retorno à Base:</strong> {route.base_arrival_time || 'Não definido'}
                     </div>
                     <div>
                       <strong>KM:</strong> {route.initial_km || 'Não definido'} - {route.final_km || 'Não definido'} 
@@ -323,9 +349,14 @@ export default function DriverRoutes() {
                               <p className="text-sm text-muted-foreground mt-1">
                                 {stop.customers?.address}
                               </p>
-                              {stop.delivery_time && (
+                              {stop.arrival_time && stop.departure_time && (
                                 <p className="text-xs text-muted-foreground">
-                                  Entregue às {stop.delivery_time}
+                                  {stop.arrival_time} - {stop.departure_time}
+                                </p>
+                              )}
+                              {stop.receiver_name && (
+                                <p className="text-xs text-muted-foreground">
+                                  Recebido por: {stop.receiver_name}
                                 </p>
                               )}
                             </div>
@@ -360,6 +391,58 @@ export default function DriverRoutes() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="arrival_time">Horário de Chegada *</Label>
+                <Input
+                  id="arrival_time"
+                  type="time"
+                  value={stopFormData.arrival_time}
+                  onChange={(e) => setStopFormData({ ...stopFormData, arrival_time: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="departure_time">Horário de Saída *</Label>
+                <Input
+                  id="departure_time"
+                  type="time"
+                  value={stopFormData.departure_time}
+                  onChange={(e) => setStopFormData({ ...stopFormData, departure_time: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="receiver_name">Responsável *</Label>
+                <Input
+                  id="receiver_name"
+                  value={stopFormData.receiver_name}
+                  onChange={(e) => setStopFormData({ ...stopFormData, receiver_name: e.target.value })}
+                  placeholder="Nome do responsável"
+                />
+              </div>
+              <div>
+                <Label htmlFor="receiver_email">E-mail</Label>
+                <Input
+                  id="receiver_email"
+                  type="email"
+                  value={stopFormData.receiver_email}
+                  onChange={(e) => setStopFormData({ ...stopFormData, receiver_email: e.target.value })}
+                  placeholder="email@empresa.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="receiver_department">Setor</Label>
+                <Input
+                  id="receiver_department"
+                  value={stopFormData.receiver_department}
+                  onChange={(e) => setStopFormData({ ...stopFormData, receiver_department: e.target.value })}
+                  placeholder="Setor da empresa"
+                />
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="notes">Observações da Entrega</Label>
               <Textarea
@@ -405,17 +488,29 @@ export default function DriverRoutes() {
           </DialogHeader>
           <div className="space-y-4">
             {selectedRoute?.status === 'pending' && (
-              <div>
-                <Label htmlFor="initial_km">KM Inicial *</Label>
-                <Input
-                  id="initial_km"
-                  type="number"
-                  value={kmFormData.initial_km}
-                  onChange={(e) => setKmFormData({ ...kmFormData, initial_km: e.target.value })}
-                  placeholder="Digite o KM inicial do veículo"
-                  required
-                />
-              </div>
+              <>
+                <div>
+                  <Label htmlFor="initial_km">KM Inicial *</Label>
+                  <Input
+                    id="initial_km"
+                    type="number"
+                    value={kmFormData.initial_km}
+                    onChange={(e) => setKmFormData({ ...kmFormData, initial_km: e.target.value })}
+                    placeholder="Digite o KM inicial do veículo"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="base_departure_time">Horário de Saída da Base *</Label>
+                  <Input
+                    id="base_departure_time"
+                    type="time"
+                    value={kmFormData.base_departure_time}
+                    onChange={(e) => setKmFormData({ ...kmFormData, base_departure_time: e.target.value })}
+                    required
+                  />
+                </div>
+              </>
             )}
             
             {selectedRoute?.status === 'in_progress' && (
@@ -437,6 +532,16 @@ export default function DriverRoutes() {
                     value={kmFormData.final_km}
                     onChange={(e) => setKmFormData({ ...kmFormData, final_km: e.target.value })}
                     placeholder="Digite o KM final do veículo"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="base_arrival_time">Horário de Chegada na Base *</Label>
+                  <Input
+                    id="base_arrival_time"
+                    type="time"
+                    value={kmFormData.base_arrival_time}
+                    onChange={(e) => setKmFormData({ ...kmFormData, base_arrival_time: e.target.value })}
                     required
                   />
                 </div>

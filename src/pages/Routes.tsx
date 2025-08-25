@@ -4,9 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Users } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,18 +15,12 @@ export default function Routes() {
   const [drivers, setDrivers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [selectedCustomers, setSelectedCustomers] = useState([]);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDriver, setSelectedDriver] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState('');
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingRoute, setEditingRoute] = useState(null);
-  const [formData, setFormData] = useState({
-    driver_id: '',
-    vehicle_id: '',
-    route_date: '',
-    selectedCustomers: []
-  });
-  const [optimizedRoute, setOptimizedRoute] = useState([]);
-  const [showDivideDialog, setShowDivideDialog] = useState(false);
-  const [routeDivisions, setRouteDivisions] = useState([]);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -72,99 +65,61 @@ export default function Routes() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!isAdmin) {
+  const createRoute = async () => {
+    if (selectedCustomers.length === 0 || !selectedDate || !selectedDriver || !selectedVehicle) {
       toast({
-        title: "Acesso negado",
-        description: "Apenas administradores podem gerenciar rotas.",
+        title: "Erro",
+        description: "Selecione a data, motorista, veículo e pelo menos um cliente.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const routeData = {
-        driver_id: formData.driver_id,
-        vehicle_id: formData.vehicle_id,
-        route_date: formData.route_date,
-      };
+      const { data: routeData, error: routeError } = await supabase
+        .from('routes')
+        .insert({
+          route_date: selectedDate,
+          driver_id: selectedDriver,
+          vehicle_id: selectedVehicle,
+          status: 'pending'
+        })
+        .select()
+        .single();
 
-      let routeId;
-      if (editingRoute) {
-        const { error } = await supabase
-          .from('routes')
-          .update(routeData)
-          .eq('id', editingRoute.id);
-        
-        if (error) throw error;
-        routeId = editingRoute.id;
-        
-        toast({
-          title: "Sucesso",
-          description: "Rota atualizada com sucesso!",
-        });
-      } else {
-        const { data: newRoute, error } = await supabase
-          .from('routes')
-          .insert([routeData])
-          .select()
-          .single();
-        
-        if (error) throw error;
-        routeId = newRoute.id;
-        
-        toast({
-          title: "Sucesso",
-          description: "Rota criada com sucesso!",
-        });
-      }
+      if (routeError) throw routeError;
 
-      // Create route stops for selected customers
-      if (formData.selectedCustomers.length > 0 && !editingRoute) {
-        const stops = formData.selectedCustomers.map((customerId: string, index: number) => ({
-          route_id: routeId,
-          customer_id: customerId,
-          stop_number: index + 1,
-          completed: false
-        }));
-
-        const { error: stopsError } = await supabase
+      const stopPromises = selectedCustomers.map((customerId, index) => 
+        supabase
           .from('route_stops')
-          .insert(stops);
+          .insert({
+            route_id: routeData.id,
+            customer_id: customerId,
+            stop_number: index + 1
+          })
+      );
 
-        if (stopsError) throw stopsError;
-      }
+      await Promise.all(stopPromises);
 
-      setIsDialogOpen(false);
-      setEditingRoute(null);
-      setFormData({
-        driver_id: '',
-        vehicle_id: '',
-        route_date: '',
-        selectedCustomers: []
+      toast({
+        title: "Sucesso",
+        description: "Rota criada com sucesso!",
       });
+
+      setSelectedCustomers([]);
+      setSelectedDriver('');
+      setSelectedVehicle('');
+      setSelectedDate('');
+      setIsDialogOpen(false);
       fetchData();
     } catch (error) {
-      console.error('Erro ao salvar rota:', error);
+      console.error('Erro ao criar rota:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar rota.",
+        description: "Não foi possível criar a rota.",
         variant: "destructive",
       });
     }
-  };
-
-  const handleEdit = (route: any) => {
-    setEditingRoute(route);
-    setFormData({
-      driver_id: route.driver_id,
-      vehicle_id: route.vehicle_id,
-      route_date: route.route_date,
-      selectedCustomers: route.route_stops?.map((stop: any) => stop.customer_id) || []
-    });
-    setIsDialogOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -202,152 +157,6 @@ export default function Routes() {
     }
   };
 
-  const optimizeRoute = () => {
-    if (formData.selectedCustomers.length === 0) {
-      toast({
-        title: "Aviso",
-        description: "Selecione pelo menos um cliente para otimizar a rota.",
-        variant: "default",
-      });
-      return;
-    }
-
-    // Otimização simples: ordenar por cidade e endereço
-    const selectedCustomersData = customers.filter(customer => 
-      formData.selectedCustomers.includes(customer.id)
-    );
-
-    const optimized = [...selectedCustomersData].sort((a, b) => {
-      // Ordenar primeiro por cidade (assumindo que está no endereço)
-      const cityA = a.address.split(',').slice(-2)[0]?.trim() || '';
-      const cityB = b.address.split(',').slice(-2)[0]?.trim() || '';
-      
-      if (cityA !== cityB) {
-        return cityA.localeCompare(cityB);
-      }
-      
-      // Se mesma cidade, ordenar por nome do cliente
-      return a.name.localeCompare(b.name);
-    });
-
-    setOptimizedRoute(optimized);
-    
-    // Atualizar a ordem dos clientes selecionados
-    setFormData({
-      ...formData,
-      selectedCustomers: optimized.map(c => c.id)
-    });
-
-    toast({
-      title: "Sucesso",
-      description: `Rota otimizada com ${optimized.length} paradas!`,
-    });
-  };
-
-  const divideRoute = () => {
-    if (optimizedRoute.length === 0) {
-      toast({
-        title: "Aviso",
-        description: "Primeiro otimize a rota antes de dividir entre motoristas.",
-        variant: "default",
-      });
-      return;
-    }
-
-    // Dividir a rota automaticamente entre os motoristas disponíveis
-    const availableDrivers = drivers.length;
-    const stopsPerDriver = Math.ceil(optimizedRoute.length / availableDrivers);
-    
-    const divisions = [];
-    for (let i = 0; i < availableDrivers && i * stopsPerDriver < optimizedRoute.length; i++) {
-      const driverStops = optimizedRoute.slice(
-        i * stopsPerDriver, 
-        (i + 1) * stopsPerDriver
-      );
-      
-      if (driverStops.length > 0) {
-        divisions.push({
-          driver_id: drivers[i]?.id || '',
-          driver_name: drivers[i]?.name || '',
-          stops: driverStops,
-          stopCount: driverStops.length
-        });
-      }
-    }
-    
-    setRouteDivisions(divisions);
-    setShowDivideDialog(true);
-  };
-
-  const createDividedRoutes = async () => {
-    if (!formData.vehicle_id || !formData.route_date) {
-      toast({
-        title: "Erro",
-        description: "Selecione um veículo e data antes de criar as rotas divididas.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      for (const division of routeDivisions) {
-        if (!division.driver_id || division.stops.length === 0) continue;
-
-        const routeData = {
-          driver_id: division.driver_id,
-          vehicle_id: formData.vehicle_id,
-          route_date: formData.route_date,
-        };
-
-        const { data: newRoute, error } = await supabase
-          .from('routes')
-          .insert([routeData])
-          .select()
-          .single();
-        
-        if (error) throw error;
-
-        // Criar paradas para esta divisão
-        const stops = division.stops.map((customer: any, index: number) => ({
-          route_id: newRoute.id,
-          customer_id: customer.id,
-          stop_number: index + 1,
-          completed: false
-        }));
-
-        const { error: stopsError } = await supabase
-          .from('route_stops')
-          .insert(stops);
-
-        if (stopsError) throw stopsError;
-      }
-
-      toast({
-        title: "Sucesso",
-        description: `${routeDivisions.length} rotas criadas com sucesso!`,
-      });
-
-      setShowDivideDialog(false);
-      setIsDialogOpen(false);
-      setOptimizedRoute([]);
-      setRouteDivisions([]);
-        setFormData({
-          driver_id: '',
-          vehicle_id: '',
-          route_date: '',
-          selectedCustomers: []
-        });
-      fetchData();
-    } catch (error) {
-      console.error('Erro ao criar rotas divididas:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao criar rotas divididas.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     const statusMap = {
       pending: { label: 'Pendente', variant: 'outline' as const },
@@ -376,200 +185,115 @@ export default function Routes() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => {
-                setEditingRoute(null);
-                setFormData({
-                  driver_id: '',
-                  vehicle_id: '',
-                  route_date: '',
-                  selectedCustomers: []
-                });
+                setSelectedCustomers([]);
+                setSelectedDriver('');
+                setSelectedVehicle('');
+                setSelectedDate('');
               }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Rota
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingRoute ? 'Editar Rota' : 'Nova Rota'}</DialogTitle>
+                <DialogTitle>Nova Rota</DialogTitle>
                 <DialogDescription>
-                  {editingRoute ? 'Edite as informações da rota' : 'Crie uma nova rota de entrega'}
+                  Crie uma nova rota selecionando motorista, veículo e clientes
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="driver_id">Motorista *</Label>
-                    <Select value={formData.driver_id} onValueChange={(value) => setFormData({ ...formData, driver_id: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o motorista" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {drivers.map((driver: any) => (
-                          <SelectItem key={driver.id} value={driver.id}>
-                            {driver.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="route-date">Data da Rota</Label>
+                    <Input
+                      id="route-date"
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                    />
                   </div>
+                  
                   <div>
-                    <Label htmlFor="vehicle_id">Veículo *</Label>
-                    <Select value={formData.vehicle_id} onValueChange={(value) => setFormData({ ...formData, vehicle_id: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o veículo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vehicles.map((vehicle: any) => (
-                          <SelectItem key={vehicle.id} value={vehicle.id}>
-                            {vehicle.plate} - {vehicle.brand} {vehicle.model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="driver-select">Motorista</Label>
+                    <select
+                      id="driver-select"
+                      value={selectedDriver}
+                      onChange={(e) => setSelectedDriver(e.target.value)}
+                      className="w-full px-3 py-2 border border-input bg-background rounded-md"
+                    >
+                      <option value="">Selecione um motorista</option>
+                      {drivers.map((driver: any) => (
+                        <option key={driver.id} value={driver.id}>
+                          {driver.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="vehicle-select">Veículo</Label>
+                    <select
+                      id="vehicle-select"
+                      value={selectedVehicle}
+                      onChange={(e) => setSelectedVehicle(e.target.value)}
+                      className="w-full px-3 py-2 border border-input bg-background rounded-md"
+                    >
+                      <option value="">Selecione um veículo</option>
+                      {vehicles.map((vehicle: any) => (
+                        <option key={vehicle.id} value={vehicle.id}>
+                          {vehicle.brand} {vehicle.model} - {vehicle.plate}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-                
+
                 <div>
-                  <Label htmlFor="route_date">Data da Rota *</Label>
-                  <Input
-                    id="route_date"
-                    type="date"
-                    value={formData.route_date}
-                    onChange={(e) => setFormData({ ...formData, route_date: e.target.value })}
-                    required
-                  />
+                  <Label>Selecione os Clientes para Entrega</Label>
+                  <div className="border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2">
+                    {customers.map((customer: any) => (
+                      <div key={customer.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`customer-${customer.id}`}
+                          checked={selectedCustomers.includes(customer.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCustomers([...selectedCustomers, customer.id]);
+                            } else {
+                              setSelectedCustomers(selectedCustomers.filter(id => id !== customer.id));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`customer-${customer.id}`} className="text-sm cursor-pointer">
+                          <strong>{customer.name}</strong> - {customer.address}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedCustomers.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {selectedCustomers.length} cliente(s) selecionado(s)
+                    </p>
+                  )}
                 </div>
 
-                {!editingRoute && (
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Clientes para Entrega</Label>
-                      <div className="border rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
-                        {optimizedRoute.length > 0 ? (
-                          optimizedRoute.map((customer: any, index) => (
-                            <div key={customer.id} className="flex items-center space-x-2 bg-green-50 p-2 rounded">
-                              <span className="font-semibold text-green-600">{index + 1}.</span>
-                              <span className="text-sm">
-                                {customer.name} - {customer.address}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          customers.map((customer: any) => (
-                            <div key={customer.id} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id={`customer-${customer.id}`}
-                                checked={formData.selectedCustomers.includes(customer.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData({
-                                      ...formData,
-                                      selectedCustomers: [...formData.selectedCustomers, customer.id]
-                                    });
-                                  } else {
-                                    setFormData({
-                                      ...formData,
-                                      selectedCustomers: formData.selectedCustomers.filter(id => id !== customer.id)
-                                    });
-                                  }
-                                }}
-                              />
-                              <label htmlFor={`customer-${customer.id}`} className="text-sm">
-                                {customer.name} - {customer.address}
-                              </label>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                    
-                    {formData.selectedCustomers.length > 0 && (
-                      <div className="flex gap-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={optimizeRoute}
-                          className="flex-1"
-                        >
-                          <Route className="h-4 w-4 mr-2" />
-                          Otimizar Rota
-                        </Button>
-                        {optimizedRoute.length > 1 && (
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            onClick={divideRoute}
-                            className="flex-1"
-                          >
-                            <Users className="h-4 w-4 mr-2" />
-                            Dividir entre Motoristas
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <Button type="submit" className="w-full">
-                  {editingRoute ? 'Atualizar' : 'Criar'} Rota
-                </Button>
-              </form>
+                <div className="flex gap-4">
+                  <Button 
+                    onClick={createRoute}
+                    disabled={selectedCustomers.length === 0 || !selectedDate || !selectedDriver || !selectedVehicle}
+                    className="w-full"
+                  >
+                    <Route className="h-4 w-4 mr-2" />
+                    Criar Rota
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         )}
       </div>
-
-      {/* Dialog para dividir rotas */}
-      <Dialog open={showDivideDialog} onOpenChange={setShowDivideDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Dividir Rota entre Motoristas</DialogTitle>
-            <DialogDescription>
-              O sistema dividiu automaticamente as {optimizedRoute.length} paradas entre {routeDivisions.length} motoristas
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {routeDivisions.map((division: any, index) => (
-              <Card key={index}>
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    Motorista: {division.driver_name}
-                  </CardTitle>
-                  <CardDescription>
-                    {division.stopCount} paradas atribuídas
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {division.stops.map((customer: any, stopIndex: number) => (
-                      <div key={customer.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                        <span className="font-semibold text-blue-600">
-                          {stopIndex + 1}.
-                        </span>
-                        <div>
-                          <p className="font-medium">{customer.name}</p>
-                          <p className="text-sm text-muted-foreground">{customer.address}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowDivideDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={createDividedRoutes}>
-              Criar {routeDivisions.length} Rotas
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {routes.length === 0 ? (
         <Card>
@@ -611,10 +335,10 @@ export default function Routes() {
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">Horários</p>
+                      <p className="text-sm font-medium">Horários da Base</p>
                       <p className="text-sm text-muted-foreground">
-                        Saída: {route.departure_time || 'Não definido'} | 
-                        Retorno: {route.return_time || 'Não definido'}
+                        Saída: {route.base_departure_time || 'Não definido'} | 
+                        Retorno: {route.base_arrival_time || 'Não definido'}
                       </p>
                     </div>
                   </div>
@@ -642,20 +366,9 @@ export default function Routes() {
                     Ver Detalhes
                   </Button>
                   {isAdmin && (
-                    <>
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(route)}>
-                        <Edit2 className="h-3 w-3 mr-1" />
-                        Editar
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDelete(route.id)}>
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Excluir
-                      </Button>
-                    </>
-                  )}
-                  {route.status === 'pending' && (
-                    <Button size="sm">
-                      Iniciar Rota
+                    <Button variant="outline" size="sm" onClick={() => handleDelete(route.id)}>
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Excluir
                     </Button>
                   )}
                 </div>

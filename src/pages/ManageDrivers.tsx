@@ -68,21 +68,52 @@ export default function ManageDrivers() {
   };
 
   const createDriver = async () => {
+    if (!driverName || !driverEmail) {
+      toast({
+        title: 'Erro',
+        description: 'Nome e email são obrigatórios',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      // Generate temporary password
+      const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
+
+      // Create driver first
+      const { data: driverData, error: driverError } = await supabase
         .from('drivers')
         .insert([{
           name: driverName,
           email: driverEmail,
           phone: driverPhone,
           license_number: driverLicense
-        }]);
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (driverError) throw driverError;
+
+      // Create user account
+      const { error: authError } = await supabase.auth.signUp({
+        email: driverEmail,
+        password: tempPassword,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            name: driverName,
+            role: 'driver',
+            driver_id: driverData.id
+          }
+        }
+      });
+
+      if (authError) throw authError;
 
       toast({
         title: 'Sucesso',
-        description: 'Motorista criado com sucesso',
+        description: `Motorista e conta criados com sucesso! Email de confirmação enviado para ${driverEmail}`,
       });
 
       setDriverName('');
@@ -91,11 +122,11 @@ export default function ManageDrivers() {
       setDriverLicense('');
       setIsDialogOpen(false);
       fetchDrivers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating driver:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao criar motorista',
+        description: error.message || 'Erro ao criar motorista',
         variant: 'destructive',
       });
     }
@@ -194,16 +225,17 @@ export default function ManageDrivers() {
                   placeholder="Nome completo do motorista"
                 />
               </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={driverEmail}
-                  onChange={(e) => setDriverEmail(e.target.value)}
-                  placeholder="email@exemplo.com"
-                />
-              </div>
+                <div>
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={driverEmail}
+                    onChange={(e) => setDriverEmail(e.target.value)}
+                    placeholder="email@exemplo.com"
+                    required
+                  />
+                </div>
               <div>
                 <Label htmlFor="phone">Telefone</Label>
                 <Input
@@ -225,9 +257,9 @@ export default function ManageDrivers() {
               <Button 
                 onClick={createDriver} 
                 className="w-full"
-                disabled={!driverName}
+                disabled={!driverName || !driverEmail}
               >
-                Criar Motorista
+                Criar Motorista com Conta
               </Button>
             </div>
           </DialogContent>
