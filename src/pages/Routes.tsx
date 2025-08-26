@@ -5,7 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap } from 'lucide-react';
+import { RouteSplitter } from '@/components/RouteSplitter';
+import { RouteMerger } from '@/components/RouteMerger';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,6 +23,8 @@ export default function Routes() {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedRouteForSplit, setSelectedRouteForSplit] = useState<any>(null);
+  const [isMergerOpen, setIsMergerOpen] = useState(false);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -182,18 +186,19 @@ export default function Routes() {
           </p>
         </div>
         {isAdmin && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => {
-                setSelectedCustomers([]);
-                setSelectedDriver('');
-                setSelectedVehicle('');
-                setSelectedDate('');
-              }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Nova Rota
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => {
+                  setSelectedCustomers([]);
+                  setSelectedDriver('');
+                  setSelectedVehicle('');
+                  setSelectedDate('');
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Rota
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nova Rota</DialogTitle>
@@ -292,6 +297,16 @@ export default function Routes() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          <Button 
+            variant="outline"
+            onClick={() => setIsMergerOpen(true)}
+            disabled={routes.filter(r => r.status === 'pending' || r.status === 'in_progress').length < 2}
+          >
+            <Merge className="h-4 w-4 mr-2" />
+            Mesclar Rotas
+          </Button>
+          </div>
         )}
       </div>
 
@@ -361,21 +376,52 @@ export default function Routes() {
                   </div>
                 </div>
                 
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex gap-2 flex-wrap">
                   <Button variant="outline" size="sm">
                     Ver Detalhes
                   </Button>
                   {isAdmin && (
-                    <Button variant="outline" size="sm" onClick={() => handleDelete(route.id)}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Excluir
-                    </Button>
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setSelectedRouteForSplit(route)}
+                      >
+                        <Split className="h-3 w-3 mr-1" />
+                        Dividir
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(route.id)}>
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Excluir
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Modais de Divisão e Mesclagem */}
+      {selectedRouteForSplit && (
+        <RouteSplitter
+          route={selectedRouteForSplit}
+          drivers={drivers}
+          vehicles={vehicles}
+          onClose={() => setSelectedRouteForSplit(null)}
+          onUpdate={fetchData}
+        />
+      )}
+
+      {isMergerOpen && (
+        <RouteMerger
+          routes={routes}
+          drivers={drivers}
+          vehicles={vehicles}
+          onClose={() => setIsMergerOpen(false)}
+          onUpdate={fetchData}
+        />
       )}
     </div>
   );

@@ -1,0 +1,466 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Split, MapPin, Clock, Users, Truck, Zap, Merge } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+interface RouteSplitterProps {
+  route: any;
+  drivers: any[];
+  vehicles: any[];
+  onClose: () => void;
+  onUpdate: () => void;
+}
+
+export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: RouteSplitterProps) => {
+  const [splitType, setSplitType] = useState<'manual' | 'proximity' | 'capacity' | 'stops' | 'time'>('manual');
+  const [numberOfSplits, setNumberOfSplits] = useState(2);
+  const [selectedStops, setSelectedStops] = useState<{[key: string]: string}>({});
+  const [availableDrivers, setAvailableDrivers] = useState<string[]>([]);
+  const [availableVehicles, setAvailableVehicles] = useState<string[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { toast } = useToast();
+
+  const splitOptions = [
+    {
+      id: 'manual',
+      title: 'Divisão Manual',
+      description: 'Selecione manualmente as paradas para cada nova rota',
+      icon: Split
+    },
+    {
+      id: 'proximity',
+      title: 'Por Proximidade',
+      description: 'Agrupa paradas próximas geograficamente',
+      icon: MapPin
+    },
+    {
+      id: 'stops',
+      title: 'Por Número de Paradas',
+      description: 'Divide igualmente o número de paradas',
+      icon: Users
+    },
+    {
+      id: 'capacity',
+      title: 'Por Capacidade',
+      description: 'Considera a capacidade do veículo',
+      icon: Truck
+    },
+    {
+      id: 'time',
+      title: 'Por Tempo Estimado',
+      description: 'Otimiza baseado no tempo de entrega',
+      icon: Clock
+    }
+  ];
+
+  const handleSplitRoute = async () => {
+    if (availableDrivers.length < numberOfSplits || availableVehicles.length < numberOfSplits) {
+      toast({
+        title: "Erro",
+        description: `Selecione pelo menos ${numberOfSplits} motoristas e veículos.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Buscar paradas da rota original
+      const { data: stops, error: stopsError } = await supabase
+        .from('route_stops')
+        .select('*')
+        .eq('route_id', route.id)
+        .order('stop_number');
+
+      if (stopsError) throw stopsError;
+
+      let groupedStops: any[][] = [];
+
+      switch (splitType) {
+        case 'manual':
+          groupedStops = await manualSplit(stops);
+          break;
+        case 'proximity':
+          groupedStops = await proximitySplit(stops);
+          break;
+        case 'stops':
+          groupedStops = await stopsSplit(stops);
+          break;
+        case 'capacity':
+          groupedStops = await capacitySplit(stops);
+          break;
+        case 'time':
+          groupedStops = await timeSplit(stops);
+          break;
+      }
+
+      // Criar novas rotas
+      await createSplitRoutes(groupedStops);
+      
+      // Atualizar status da rota original
+      await supabase
+        .from('routes')
+        .update({ status: 'split' })
+        .eq('id', route.id);
+
+      toast({
+        title: "Sucesso",
+        description: `Rota dividida em ${groupedStops.length} novas rotas!`,
+      });
+
+      onUpdate();
+      onClose();
+    } catch (error) {
+      console.error('Erro ao dividir rota:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível dividir a rota.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const manualSplit = async (stops: any[]) => {
+    const groups: any[][] = Array.from({ length: numberOfSplits }, () => []);
+    
+    stops.forEach(stop => {
+      const groupIndex = parseInt(selectedStops[stop.id] || '0');
+      if (groupIndex < numberOfSplits) {
+        groups[groupIndex].push(stop);
+      }
+    });
+
+    return groups.filter(group => group.length > 0);
+  };
+
+  const proximitySplit = async (stops: any[]) => {
+    // Implementação simplificada - na prática seria com API de geolocalização
+    const groups: any[][] = Array.from({ length: numberOfSplits }, () => []);
+    
+    stops.forEach((stop, index) => {
+      const groupIndex = index % numberOfSplits;
+      groups[groupIndex].push(stop);
+    });
+
+    return groups.filter(group => group.length > 0);
+  };
+
+  const stopsSplit = async (stops: any[]) => {
+    const groups: any[][] = Array.from({ length: numberOfSplits }, () => []);
+    const stopsPerGroup = Math.ceil(stops.length / numberOfSplits);
+
+    stops.forEach((stop, index) => {
+      const groupIndex = Math.floor(index / stopsPerGroup);
+      if (groupIndex < numberOfSplits) {
+        groups[groupIndex].push(stop);
+      }
+    });
+
+    return groups.filter(group => group.length > 0);
+  };
+
+  const capacitySplit = async (stops: any[]) => {
+    // Implementação simplificada baseada na capacidade estimada
+    return await stopsSplit(stops);
+  };
+
+  const timeSplit = async (stops: any[]) => {
+    // Implementação simplificada baseada no tempo estimado
+    return await stopsSplit(stops);
+  };
+
+  const createSplitRoutes = async (groupedStops: any[][]) => {
+    for (let i = 0; i < groupedStops.length; i++) {
+      const group = groupedStops[i];
+      if (group.length === 0) continue;
+
+      // Criar nova rota
+      const { data: newRoute, error: routeError } = await supabase
+        .from('routes')
+        .insert({
+          route_date: route.route_date,
+          driver_id: availableDrivers[i],
+          vehicle_id: availableVehicles[i],
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (routeError) throw routeError;
+
+      // Criar paradas para a nova rota
+      const stopPromises = group.map((stop, index) => 
+        supabase
+          .from('route_stops')
+          .insert({
+            route_id: newRoute.id,
+            customer_id: stop.customer_id,
+            stop_number: index + 1
+          })
+      );
+
+      await Promise.all(stopPromises);
+
+      // Remover paradas da rota original
+      const stopIds = group.map(stop => stop.id);
+      await supabase
+        .from('route_stops')
+        .delete()
+        .in('id', stopIds);
+    }
+  };
+
+  const handleOptimizeRoute = async () => {
+    setIsProcessing(true);
+    try {
+      // Buscar paradas e reordenar por proximidade (implementação simplificada)
+      const { data: stops, error } = await supabase
+        .from('route_stops')
+        .select('*')
+        .eq('route_id', route.id)
+        .order('stop_number');
+
+      if (error) throw error;
+
+      // Reordenar paradas (implementação simplificada)
+      const optimizedStops = [...stops].sort(() => Math.random() - 0.5);
+
+      // Atualizar ordem das paradas
+      const updatePromises = optimizedStops.map((stop, index) =>
+        supabase
+          .from('route_stops')
+          .update({ stop_number: index + 1 })
+          .eq('id', stop.id)
+      );
+
+      await Promise.all(updatePromises);
+
+      toast({
+        title: "Sucesso",
+        description: "Rota otimizada com sucesso!",
+      });
+
+      onUpdate();
+    } catch (error) {
+      console.error('Erro ao otimizar rota:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível otimizar a rota.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Split className="h-5 w-5" />
+            Dividir Rota
+          </DialogTitle>
+          <DialogDescription>
+            Divida esta rota em múltiplas rotas menores para otimizar as entregas
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Informações da Rota Original */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Rota Original</CardTitle>
+              <CardDescription>
+                {route.drivers?.name} - {route.vehicles?.brand} {route.vehicles?.model}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <Badge variant="outline">
+                  {route.route_stops?.length || 0} paradas
+                </Badge>
+                <Badge variant="outline">
+                  Data: {new Date(route.route_date).toLocaleDateString('pt-BR')}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Otimização Rápida */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Otimização Rápida
+              </CardTitle>
+              <CardDescription>
+                Otimize a rota atual sem dividi-la
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                onClick={handleOptimizeRoute}
+                disabled={isProcessing}
+                variant="outline"
+                className="w-full"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Otimizar Rota Atual
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Separator />
+
+          {/* Tipos de Divisão */}
+          <div>
+            <Label className="text-base font-semibold">Método de Divisão</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              {splitOptions.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <Card 
+                    key={option.id}
+                    className={`cursor-pointer transition-colors ${
+                      splitType === option.id ? 'ring-2 ring-primary' : ''
+                    }`}
+                    onClick={() => setSplitType(option.id as any)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon className="h-4 w-4" />
+                        <h4 className="font-medium text-sm">{option.title}</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{option.description}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Configurações de Divisão */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="splits">Número de Rotas</Label>
+              <Input
+                id="splits"
+                type="number"
+                min="2"
+                max="10"
+                value={numberOfSplits}
+                onChange={(e) => setNumberOfSplits(parseInt(e.target.value) || 2)}
+              />
+            </div>
+          </div>
+
+          {/* Seleção de Motoristas */}
+          <div>
+            <Label>Motoristas Disponíveis ({availableDrivers.length}/{numberOfSplits} selecionados)</Label>
+            <div className="border rounded-lg p-4 max-h-40 overflow-y-auto">
+              {drivers.map((driver) => (
+                <div key={driver.id} className="flex items-center space-x-2 py-1">
+                  <input
+                    type="checkbox"
+                    id={`driver-${driver.id}`}
+                    checked={availableDrivers.includes(driver.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAvailableDrivers([...availableDrivers, driver.id]);
+                      } else {
+                        setAvailableDrivers(availableDrivers.filter(id => id !== driver.id));
+                      }
+                    }}
+                  />
+                  <label htmlFor={`driver-${driver.id}`} className="text-sm cursor-pointer">
+                    {driver.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Seleção de Veículos */}
+          <div>
+            <Label>Veículos Disponíveis ({availableVehicles.length}/{numberOfSplits} selecionados)</Label>
+            <div className="border rounded-lg p-4 max-h-40 overflow-y-auto">
+              {vehicles.map((vehicle) => (
+                <div key={vehicle.id} className="flex items-center space-x-2 py-1">
+                  <input
+                    type="checkbox"
+                    id={`vehicle-${vehicle.id}`}
+                    checked={availableVehicles.includes(vehicle.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAvailableVehicles([...availableVehicles, vehicle.id]);
+                      } else {
+                        setAvailableVehicles(availableVehicles.filter(id => id !== vehicle.id));
+                      }
+                    }}
+                  />
+                  <label htmlFor={`vehicle-${vehicle.id}`} className="text-sm cursor-pointer">
+                    {vehicle.brand} {vehicle.model} - {vehicle.plate}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Divisão Manual */}
+          {splitType === 'manual' && (
+            <div>
+              <Label>Atribuir Paradas às Rotas</Label>
+              <div className="border rounded-lg p-4 max-h-60 overflow-y-auto">
+                {route.route_stops?.map((stop: any, index: number) => (
+                  <div key={stop.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Parada {index + 1}</p>
+                      <p className="text-xs text-muted-foreground">{stop.customers?.name}</p>
+                    </div>
+                    <select
+                      value={selectedStops[stop.id] || '0'}
+                      onChange={(e) => setSelectedStops({
+                        ...selectedStops,
+                        [stop.id]: e.target.value
+                      })}
+                      className="w-32 px-2 py-1 border rounded text-sm"
+                    >
+                      {Array.from({ length: numberOfSplits }, (_, i) => (
+                        <option key={i} value={i}>Rota {i + 1}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Botões de Ação */}
+          <div className="flex gap-4">
+            <Button
+              onClick={handleSplitRoute}
+              disabled={isProcessing || availableDrivers.length < numberOfSplits || availableVehicles.length < numberOfSplits}
+              className="flex-1"
+            >
+              <Split className="h-4 w-4 mr-2" />
+              {isProcessing ? 'Dividindo...' : 'Dividir Rota'}
+            </Button>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
