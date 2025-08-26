@@ -187,6 +187,7 @@ export type Database = {
           delivery_time: string | null
           departure_time: string | null
           id: string
+          material_description: string | null
           notes: string | null
           photos: string[] | null
           receiver_department: string | null
@@ -196,6 +197,8 @@ export type Database = {
           signature_url: string | null
           stop_number: number
           updated_at: string
+          volume_m3: number | null
+          weight_kg: number | null
         }
         Insert: {
           arrival_time?: string | null
@@ -205,6 +208,7 @@ export type Database = {
           delivery_time?: string | null
           departure_time?: string | null
           id?: string
+          material_description?: string | null
           notes?: string | null
           photos?: string[] | null
           receiver_department?: string | null
@@ -214,6 +218,8 @@ export type Database = {
           signature_url?: string | null
           stop_number: number
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Update: {
           arrival_time?: string | null
@@ -223,6 +229,7 @@ export type Database = {
           delivery_time?: string | null
           departure_time?: string | null
           id?: string
+          material_description?: string | null
           notes?: string | null
           photos?: string[] | null
           receiver_department?: string | null
@@ -232,6 +239,8 @@ export type Database = {
           signature_url?: string | null
           stop_number?: number
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Relationships: [
           {

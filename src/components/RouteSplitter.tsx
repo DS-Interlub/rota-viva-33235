@@ -48,8 +48,8 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
     },
     {
       id: 'capacity',
-      title: 'Por Capacidade',
-      description: 'Considera a capacidade do veículo',
+      title: 'Por Peso',
+      description: 'Considera o peso dos materiais para dividir as rotas',
       icon: Truck
     },
     {
@@ -75,7 +75,7 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
       // Buscar paradas da rota original
       const { data: stops, error: stopsError } = await supabase
         .from('route_stops')
-        .select('*')
+        .select('*, customers(name)')
         .eq('route_id', route.id)
         .order('stop_number');
 
@@ -169,7 +169,30 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
   };
 
   const capacitySplit = async (stops: any[]) => {
-    // Implementação simplificada baseada na capacidade estimada
+    // Dividir por peso quando disponível
+    const totalWeight = stops.reduce((sum, stop) => sum + (stop.weight_kg || 0), 0);
+    
+    if (totalWeight > 0) {
+      const targetWeightPerRoute = totalWeight / numberOfSplits;
+      const groups: any[][] = Array.from({ length: numberOfSplits }, () => []);
+      
+      let currentGroup = 0;
+      let currentWeight = 0;
+
+      stops.forEach(stop => {
+        if (currentWeight + (stop.weight_kg || 0) > targetWeightPerRoute && groups[currentGroup].length > 0 && currentGroup < numberOfSplits - 1) {
+          currentGroup++;
+          currentWeight = 0;
+        }
+        
+        groups[currentGroup].push(stop);
+        currentWeight += (stop.weight_kg || 0);
+      });
+
+      return groups.filter(group => group.length > 0);
+    }
+    
+    // Fallback para divisão por número de paradas se não houver peso
     return await stopsSplit(stops);
   };
 
@@ -204,7 +227,10 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
           .insert({
             route_id: newRoute.id,
             customer_id: stop.customer_id,
-            stop_number: index + 1
+            stop_number: index + 1,
+            weight_kg: stop.weight_kg,
+            volume_m3: stop.volume_m3,
+            material_description: stop.material_description
           })
       );
 
@@ -426,6 +452,13 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
                     <div className="flex-1">
                       <p className="text-sm font-medium">Parada {index + 1}</p>
                       <p className="text-xs text-muted-foreground">{stop.customers?.name}</p>
+                      {(stop.weight_kg || stop.volume_m3 || stop.material_description) && (
+                        <div className="text-xs text-muted-foreground mt-1 space-x-2">
+                          {stop.weight_kg > 0 && <span>Peso: {stop.weight_kg}kg</span>}
+                          {stop.volume_m3 > 0 && <span>Volume: {stop.volume_m3}m³</span>}
+                          {stop.material_description && <span>Material: {stop.material_description}</span>}
+                        </div>
+                      )}
                     </div>
                     <select
                       value={selectedStops[stop.id] || '0'}

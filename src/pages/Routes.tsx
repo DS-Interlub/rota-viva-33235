@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale } from 'lucide-react';
 import { RouteSplitter } from '@/components/RouteSplitter';
 import { RouteMerger } from '@/components/RouteMerger';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +18,7 @@ export default function Routes() {
   const [vehicles, setVehicles] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
+  const [customerMaterials, setCustomerMaterials] = useState<{[key: string]: {weight: number, volume: number, description: string}}>({});
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedDriver, setSelectedDriver] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState('');
@@ -25,6 +26,9 @@ export default function Routes() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRouteForSplit, setSelectedRouteForSplit] = useState<any>(null);
   const [isMergerOpen, setIsMergerOpen] = useState(false);
+  const [shouldSplitOnCreate, setShouldSplitOnCreate] = useState(false);
+  const [splitMethod, setSplitMethod] = useState<'weight' | 'volume' | 'stops'>('weight');
+  const [numberOfRoutesToCreate, setNumberOfRoutesToCreate] = useState(2);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -79,41 +83,30 @@ export default function Routes() {
       return;
     }
 
-    try {
-      const { data: routeData, error: routeError } = await supabase
-        .from('routes')
-        .insert({
-          route_date: selectedDate,
-          driver_id: selectedDriver,
-          vehicle_id: selectedVehicle,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (routeError) throw routeError;
-
-      const stopPromises = selectedCustomers.map((customerId, index) => 
-        supabase
-          .from('route_stops')
-          .insert({
-            route_id: routeData.id,
-            customer_id: customerId,
-            stop_number: index + 1
-          })
-      );
-
-      await Promise.all(stopPromises);
-
+    // Verificar se divisão automática está habilitada e se há motoristas/veículos suficientes
+    if (shouldSplitOnCreate && (drivers.length < numberOfRoutesToCreate || vehicles.length < numberOfRoutesToCreate)) {
       toast({
-        title: "Sucesso",
-        description: "Rota criada com sucesso!",
+        title: "Erro",
+        description: `Para criar ${numberOfRoutesToCreate} rotas, você precisa de pelo menos ${numberOfRoutesToCreate} motoristas e veículos disponíveis.`,
+        variant: "destructive",
       });
+      return;
+    }
 
+    try {
+      if (shouldSplitOnCreate) {
+        await createSplitRoutes();
+      } else {
+        await createSingleRoute();
+      }
+
+      // Reset form
       setSelectedCustomers([]);
+      setCustomerMaterials({});
       setSelectedDriver('');
       setSelectedVehicle('');
       setSelectedDate('');
+      setShouldSplitOnCreate(false);
       setIsDialogOpen(false);
       fetchData();
     } catch (error) {
@@ -124,6 +117,166 @@ export default function Routes() {
         variant: "destructive",
       });
     }
+  };
+
+  const createSingleRoute = async () => {
+    const { data: routeData, error: routeError } = await supabase
+      .from('routes')
+      .insert({
+        route_date: selectedDate,
+        driver_id: selectedDriver,
+        vehicle_id: selectedVehicle,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (routeError) throw routeError;
+
+    const stopPromises = selectedCustomers.map((customerId, index) => {
+      const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+      return supabase
+        .from('route_stops')
+        .insert({
+          route_id: routeData.id,
+          customer_id: customerId,
+          stop_number: index + 1,
+          weight_kg: materials.weight,
+          volume_m3: materials.volume,
+          material_description: materials.description
+        });
+    });
+
+    await Promise.all(stopPromises);
+
+    toast({
+      title: "Sucesso",
+      description: "Rota criada com sucesso!",
+    });
+  };
+
+  const createSplitRoutes = async () => {
+    // Agrupar clientes por critério de divisão
+    let groups: string[][] = [];
+
+    if (splitMethod === 'weight') {
+      groups = splitByWeight();
+    } else if (splitMethod === 'volume') {
+      groups = splitByVolume();
+    } else {
+      groups = splitByStops();
+    }
+
+    // Criar rotas para cada grupo
+    for (let i = 0; i < Math.min(groups.length, numberOfRoutesToCreate); i++) {
+      const group = groups[i];
+      if (group.length === 0) continue;
+
+      const driverId = i < drivers.length ? drivers[i].id : selectedDriver;
+      const vehicleId = i < vehicles.length ? vehicles[i].id : selectedVehicle;
+
+      const { data: routeData, error: routeError } = await supabase
+        .from('routes')
+        .insert({
+          route_date: selectedDate,
+          driver_id: driverId,
+          vehicle_id: vehicleId,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (routeError) throw routeError;
+
+      const stopPromises = group.map((customerId, index) => {
+        const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+        return supabase
+          .from('route_stops')
+          .insert({
+            route_id: routeData.id,
+            customer_id: customerId,
+            stop_number: index + 1,
+            weight_kg: materials.weight,
+            volume_m3: materials.volume,
+            material_description: materials.description
+          });
+      });
+
+      await Promise.all(stopPromises);
+    }
+
+    toast({
+      title: "Sucesso",
+      description: `${Math.min(groups.length, numberOfRoutesToCreate)} rotas criadas com sucesso!`,
+    });
+  };
+
+  const splitByWeight = (): string[][] => {
+    const totalWeight = selectedCustomers.reduce((sum, customerId) => {
+      const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+      return sum + materials.weight;
+    }, 0);
+    
+    const targetWeightPerRoute = totalWeight / numberOfRoutesToCreate;
+    const groups: string[][] = Array.from({ length: numberOfRoutesToCreate }, () => []);
+    
+    let currentGroup = 0;
+    let currentWeight = 0;
+
+    selectedCustomers.forEach(customerId => {
+      const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+      
+      if (currentWeight + materials.weight > targetWeightPerRoute && groups[currentGroup].length > 0 && currentGroup < numberOfRoutesToCreate - 1) {
+        currentGroup++;
+        currentWeight = 0;
+      }
+      
+      groups[currentGroup].push(customerId);
+      currentWeight += materials.weight;
+    });
+
+    return groups.filter(group => group.length > 0);
+  };
+
+  const splitByVolume = (): string[][] => {
+    const totalVolume = selectedCustomers.reduce((sum, customerId) => {
+      const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+      return sum + materials.volume;
+    }, 0);
+    
+    const targetVolumePerRoute = totalVolume / numberOfRoutesToCreate;
+    const groups: string[][] = Array.from({ length: numberOfRoutesToCreate }, () => []);
+    
+    let currentGroup = 0;
+    let currentVolume = 0;
+
+    selectedCustomers.forEach(customerId => {
+      const materials = customerMaterials[customerId] || { weight: 0, volume: 0, description: '' };
+      
+      if (currentVolume + materials.volume > targetVolumePerRoute && groups[currentGroup].length > 0 && currentGroup < numberOfRoutesToCreate - 1) {
+        currentGroup++;
+        currentVolume = 0;
+      }
+      
+      groups[currentGroup].push(customerId);
+      currentVolume += materials.volume;
+    });
+
+    return groups.filter(group => group.length > 0);
+  };
+
+  const splitByStops = (): string[][] => {
+    const groups: string[][] = Array.from({ length: numberOfRoutesToCreate }, () => []);
+    const stopsPerGroup = Math.ceil(selectedCustomers.length / numberOfRoutesToCreate);
+
+    selectedCustomers.forEach((customerId, index) => {
+      const groupIndex = Math.floor(index / stopsPerGroup);
+      if (groupIndex < numberOfRoutesToCreate) {
+        groups[groupIndex].push(customerId);
+      }
+    });
+
+    return groups.filter(group => group.length > 0);
   };
 
   const handleDelete = async (id: string) => {
@@ -191,9 +344,11 @@ export default function Routes() {
               <DialogTrigger asChild>
                 <Button onClick={() => {
                   setSelectedCustomers([]);
+                  setCustomerMaterials({});
                   setSelectedDriver('');
                   setSelectedVehicle('');
                   setSelectedDate('');
+                  setShouldSplitOnCreate(false);
                 }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nova Rota
@@ -256,24 +411,95 @@ export default function Routes() {
 
                 <div>
                   <Label>Selecione os Clientes para Entrega</Label>
-                  <div className="border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2">
+                  <div className="border rounded-lg p-4 max-h-60 overflow-y-auto space-y-3">
                     {customers.map((customer: any) => (
-                      <div key={customer.id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`customer-${customer.id}`}
-                          checked={selectedCustomers.includes(customer.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedCustomers([...selectedCustomers, customer.id]);
-                            } else {
-                              setSelectedCustomers(selectedCustomers.filter(id => id !== customer.id));
-                            }
-                          }}
-                        />
-                        <label htmlFor={`customer-${customer.id}`} className="text-sm cursor-pointer">
-                          <strong>{customer.name}</strong> - {customer.address}
-                        </label>
+                      <div key={customer.id} className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`customer-${customer.id}`}
+                            checked={selectedCustomers.includes(customer.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCustomers([...selectedCustomers, customer.id]);
+                              } else {
+                                setSelectedCustomers(selectedCustomers.filter(id => id !== customer.id));
+                                setCustomerMaterials({...customerMaterials, [customer.id]: undefined});
+                              }
+                            }}
+                          />
+                          <label htmlFor={`customer-${customer.id}`} className="text-sm cursor-pointer font-medium">
+                            {customer.name} - {customer.address}
+                          </label>
+                        </div>
+                        
+                        {selectedCustomers.includes(customer.id) && (
+                          <div className="ml-6 grid grid-cols-1 md:grid-cols-3 gap-2 p-3 bg-muted/50 rounded-lg">
+                            <div>
+                              <Label className="text-xs">Peso (kg)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                value={customerMaterials[customer.id]?.weight || ''}
+                                onChange={(e) => {
+                                  const weight = parseFloat(e.target.value) || 0;
+                                  setCustomerMaterials({
+                                    ...customerMaterials,
+                                    [customer.id]: {
+                                      ...customerMaterials[customer.id],
+                                      weight,
+                                      volume: customerMaterials[customer.id]?.volume || 0,
+                                      description: customerMaterials[customer.id]?.description || ''
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Volume (m³)</Label>
+                              <Input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                placeholder="0.000"
+                                value={customerMaterials[customer.id]?.volume || ''}
+                                onChange={(e) => {
+                                  const volume = parseFloat(e.target.value) || 0;
+                                  setCustomerMaterials({
+                                    ...customerMaterials,
+                                    [customer.id]: {
+                                      ...customerMaterials[customer.id],
+                                      weight: customerMaterials[customer.id]?.weight || 0,
+                                      volume,
+                                      description: customerMaterials[customer.id]?.description || ''
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Material</Label>
+                              <Input
+                                placeholder="Descrição do material"
+                                value={customerMaterials[customer.id]?.description || ''}
+                                onChange={(e) => {
+                                  const description = e.target.value;
+                                  setCustomerMaterials({
+                                    ...customerMaterials,
+                                    [customer.id]: {
+                                      ...customerMaterials[customer.id],
+                                      weight: customerMaterials[customer.id]?.weight || 0,
+                                      volume: customerMaterials[customer.id]?.volume || 0,
+                                      description
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -284,6 +510,65 @@ export default function Routes() {
                   )}
                 </div>
 
+                {/* Divisão Automática */}
+                {selectedCustomers.length > 1 && (
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="split-on-create"
+                        checked={shouldSplitOnCreate}
+                        onChange={(e) => setShouldSplitOnCreate(e.target.checked)}
+                      />
+                      <Label htmlFor="split-on-create" className="cursor-pointer font-medium">
+                        Dividir automaticamente em múltiplas rotas
+                      </Label>
+                    </div>
+
+                    {shouldSplitOnCreate && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label>Número de Rotas</Label>
+                            <Input
+                              type="number"
+                              min="2"
+                              max={Math.min(drivers.length, vehicles.length)}
+                              value={numberOfRoutesToCreate}
+                              onChange={(e) => setNumberOfRoutesToCreate(parseInt(e.target.value) || 2)}
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label>Método de Divisão</Label>
+                            <select
+                              value={splitMethod}
+                              onChange={(e) => setSplitMethod(e.target.value as 'weight' | 'volume' | 'stops')}
+                              className="w-full px-3 py-2 border border-input bg-background rounded-md"
+                            >
+                              <option value="weight">Por Peso</option>
+                              <option value="volume">Por Volume</option>
+                              <option value="stops">Por Número de Paradas</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-muted-foreground">
+                          <p>
+                            <strong>Motoristas disponíveis:</strong> {drivers.length} | 
+                            <strong> Veículos disponíveis:</strong> {vehicles.length}
+                          </p>
+                          {(drivers.length < numberOfRoutesToCreate || vehicles.length < numberOfRoutesToCreate) && (
+                            <p className="text-destructive mt-1">
+                              ⚠️ Você precisa de pelo menos {numberOfRoutesToCreate} motoristas e veículos para criar {numberOfRoutesToCreate} rotas.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex gap-4">
                   <Button 
                     onClick={createRoute}
@@ -291,7 +576,7 @@ export default function Routes() {
                     className="w-full"
                   >
                     <Route className="h-4 w-4 mr-2" />
-                    Criar Rota
+                    {shouldSplitOnCreate ? `Criar ${numberOfRoutesToCreate} Rotas` : 'Criar Rota'}
                   </Button>
                 </div>
               </div>
