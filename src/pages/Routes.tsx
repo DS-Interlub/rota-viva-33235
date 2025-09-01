@@ -76,24 +76,15 @@ export default function Routes() {
   };
 
   const createRoute = async () => {
-    if (selectedCustomers.length === 0 || !selectedDate || !selectedDriver || !selectedVehicle) {
+    if (selectedCustomers.length === 0 || !selectedDate) {
       toast({
         title: "Erro",
-        description: "Selecione a data, motorista, veículo e pelo menos um cliente.",
+        description: "Selecione a data da rota e pelo menos um cliente.",
         variant: "destructive",
       });
       return;
     }
 
-    // Verificar se divisão automática está habilitada e se há motoristas/veículos suficientes
-    if (shouldSplitOnCreate && (drivers.length < numberOfRoutesToCreate || vehicles.length < numberOfRoutesToCreate)) {
-      toast({
-        title: "Erro",
-        description: `Para criar ${numberOfRoutesToCreate} rotas, você precisa de pelo menos ${numberOfRoutesToCreate} motoristas e veículos disponíveis.`,
-        variant: "destructive",
-      });
-      return;
-    }
 
     try {
       if (shouldSplitOnCreate) {
@@ -105,8 +96,6 @@ export default function Routes() {
       // Reset form
       setSelectedCustomers([]);
       setCustomerMaterials({});
-      setSelectedDriver('');
-      setSelectedVehicle('');
       setSelectedDate('');
       setShouldSplitOnCreate(false);
       setIsDialogOpen(false);
@@ -126,9 +115,9 @@ export default function Routes() {
       .from('routes')
       .insert({
         route_date: selectedDate,
-        driver_id: selectedDriver,
-        vehicle_id: selectedVehicle,
-        status: 'pending'
+        driver_id: null,
+        vehicle_id: null,
+        status: 'draft'
       })
       .select()
       .single();
@@ -153,7 +142,7 @@ export default function Routes() {
 
     toast({
       title: "Sucesso",
-      description: "Rota criada com sucesso!",
+      description: "Rota criada com sucesso! Agora você pode otimizar e atribuir motorista/veículo.",
     });
   };
 
@@ -206,7 +195,7 @@ export default function Routes() {
 
     toast({
       title: "Sucesso",
-      description: `${Math.min(groups.length, numberOfRoutesToCreate)} rotas criadas com sucesso!`,
+      description: `${Math.min(groups.length, numberOfRoutesToCreate)} rotas criadas com sucesso! Agora você pode atribuir motoristas/veículos.`,
     });
   };
 
@@ -345,8 +334,6 @@ export default function Routes() {
                 <Button onClick={() => {
                   setSelectedCustomers([]);
                   setCustomerMaterials({});
-                  setSelectedDriver('');
-                  setSelectedVehicle('');
                   setSelectedDate('');
                   setShouldSplitOnCreate(false);
                 }}>
@@ -358,12 +345,12 @@ export default function Routes() {
               <DialogHeader>
                 <DialogTitle>Nova Rota</DialogTitle>
                 <DialogDescription>
-                  Crie uma nova rota selecionando motorista, veículo e clientes
+                  Crie uma nova rota selecionando a data e os clientes. Motorista e veículo serão atribuídos após otimização.
                 </DialogDescription>
               </DialogHeader>
               
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <Label htmlFor="route-date">Data da Rota</Label>
                     <Input
@@ -372,40 +359,6 @@ export default function Routes() {
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                     />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="driver-select">Motorista</Label>
-                    <select
-                      id="driver-select"
-                      value={selectedDriver}
-                      onChange={(e) => setSelectedDriver(e.target.value)}
-                      className="w-full px-3 py-2 border border-input bg-background rounded-md"
-                    >
-                      <option value="">Selecione um motorista</option>
-                      {drivers.map((driver: any) => (
-                        <option key={driver.id} value={driver.id}>
-                          {driver.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="vehicle-select">Veículo</Label>
-                    <select
-                      id="vehicle-select"
-                      value={selectedVehicle}
-                      onChange={(e) => setSelectedVehicle(e.target.value)}
-                      className="w-full px-3 py-2 border border-input bg-background rounded-md"
-                    >
-                      <option value="">Selecione um veículo</option>
-                      {vehicles.map((vehicle: any) => (
-                        <option key={vehicle.id} value={vehicle.id}>
-                          {vehicle.brand} {vehicle.model} - {vehicle.plate}
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 </div>
 
@@ -572,7 +525,7 @@ export default function Routes() {
                 <div className="flex gap-4">
                   <Button 
                     onClick={createRoute}
-                    disabled={selectedCustomers.length === 0 || !selectedDate || !selectedDriver || !selectedVehicle}
+                    disabled={selectedCustomers.length === 0 || !selectedDate}
                     className="w-full"
                   >
                     <Route className="h-4 w-4 mr-2" />
