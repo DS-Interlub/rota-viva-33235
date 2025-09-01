@@ -76,15 +76,50 @@ export default function Drivers() {
           description: "Motorista atualizado com sucesso!",
         });
       } else {
-        const { error } = await supabase
+        // Criar motorista primeiro
+        const { data: driverData, error: driverError } = await supabase
           .from('drivers')
-          .insert([formData]);
+          .insert([formData])
+          .select()
+          .single();
         
-        if (error) throw error;
-        toast({
-          title: "Sucesso",
-          description: "Motorista cadastrado com sucesso!",
-        });
+        if (driverError) throw driverError;
+
+        // Se tem email, criar conta de usuário automaticamente
+        if (formData.email) {
+          const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
+          
+          const { error: authError } = await supabase.auth.signUp({
+            email: formData.email,
+            password: tempPassword,
+            options: {
+              emailRedirectTo: `${window.location.origin}/`,
+              data: {
+                name: formData.name,
+                role: 'driver',
+                driver_id: driverData.id
+              }
+            }
+          });
+
+          if (authError) {
+            console.warn('Erro ao criar conta de usuário:', authError);
+            toast({
+              title: "Sucesso",
+              description: "Motorista cadastrado! Erro ao criar conta de usuário - pode ser criada posteriormente.",
+            });
+          } else {
+            toast({
+              title: "Sucesso",
+              description: `Motorista e conta criados com sucesso! Email de confirmação enviado para ${formData.email}`,
+            });
+          }
+        } else {
+          toast({
+            title: "Sucesso",
+            description: "Motorista cadastrado com sucesso! Adicione um email para criar conta de usuário.",
+          });
+        }
       }
 
       setIsDialogOpen(false);

@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale, UserPlus } from 'lucide-react';
 import { RouteSplitter } from '@/components/RouteSplitter';
 import { RouteMerger } from '@/components/RouteMerger';
+import { RouteAssignment } from '@/components/RouteAssignment';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,6 +27,7 @@ export default function Routes() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRouteForSplit, setSelectedRouteForSplit] = useState<any>(null);
   const [isMergerOpen, setIsMergerOpen] = useState(false);
+  const [selectedRouteForAssignment, setSelectedRouteForAssignment] = useState<any>(null);
   const [shouldSplitOnCreate, setShouldSplitOnCreate] = useState(false);
   const [splitMethod, setSplitMethod] = useState<'weight' | 'volume' | 'stops'>('weight');
   const [numberOfRoutesToCreate, setNumberOfRoutesToCreate] = useState(2);
@@ -167,21 +169,18 @@ export default function Routes() {
       groups = splitByStops();
     }
 
-    // Criar rotas para cada grupo
+    // Criar rotas sem atribuir motorista/veículo inicialmente - serão atribuídos após otimização
     for (let i = 0; i < Math.min(groups.length, numberOfRoutesToCreate); i++) {
       const group = groups[i];
       if (group.length === 0) continue;
-
-      const driverId = i < drivers.length ? drivers[i].id : selectedDriver;
-      const vehicleId = i < vehicles.length ? vehicles[i].id : selectedVehicle;
 
       const { data: routeData, error: routeError } = await supabase
         .from('routes')
         .insert({
           route_date: selectedDate,
-          driver_id: driverId,
-          vehicle_id: vehicleId,
-          status: 'pending'
+          driver_id: null, // Será atribuído depois
+          vehicle_id: null, // Será atribuído depois
+          status: 'draft' // Status draft para indicar que precisa de atribuição
         })
         .select()
         .single();
@@ -316,6 +315,7 @@ export default function Routes() {
 
   const getStatusBadge = (status: string) => {
     const statusMap = {
+      draft: { label: 'Rascunho', variant: 'outline' as const },
       pending: { label: 'Pendente', variant: 'outline' as const },
       in_progress: { label: 'Em andamento', variant: 'default' as const },
       completed: { label: 'Concluída', variant: 'secondary' as const },
@@ -620,14 +620,24 @@ export default function Routes() {
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Truck className="h-5 w-5" />
-                      {route.drivers?.name}
+                      {route.drivers?.name || 'Sem motorista'}
                       {getStatusBadge(route.status)}
                     </CardTitle>
                     <CardDescription>
                       Data: {new Date(route.route_date).toLocaleDateString('pt-BR')} | 
-                      Veículo: {route.vehicles?.brand} {route.vehicles?.model} - {route.vehicles?.plate}
+                      Veículo: {route.vehicles ? `${route.vehicles.brand} ${route.vehicles.model} - ${route.vehicles.plate}` : 'Sem veículo'}
                     </CardDescription>
                   </div>
+                  {route.status === 'draft' && (
+                    <Button 
+                      size="sm" 
+onClick={() => setSelectedRouteForAssignment(route)}
+                      className="ml-2"
+                    >
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Atribuir
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -671,6 +681,7 @@ export default function Routes() {
                         variant="outline" 
                         size="sm" 
                         onClick={() => setSelectedRouteForSplit(route)}
+                        disabled={route.status === 'draft'}
                       >
                         <Split className="h-3 w-3 mr-1" />
                         Dividir
@@ -688,7 +699,7 @@ export default function Routes() {
         </div>
       )}
 
-      {/* Modais de Divisão e Mesclagem */}
+      {/* Modais de Divisão, Mesclagem e Atribuição */}
       {selectedRouteForSplit && (
         <RouteSplitter
           route={selectedRouteForSplit}
@@ -705,6 +716,16 @@ export default function Routes() {
           drivers={drivers}
           vehicles={vehicles}
           onClose={() => setIsMergerOpen(false)}
+          onUpdate={fetchData}
+        />
+      )}
+
+      {selectedRouteForAssignment && (
+        <RouteAssignment
+          route={selectedRouteForAssignment}
+          drivers={drivers}
+          vehicles={vehicles}
+          onClose={() => setSelectedRouteForAssignment(null)}
           onUpdate={fetchData}
         />
       )}
