@@ -14,6 +14,7 @@ import Vehicles from "./pages/Vehicles";
 import Expenses from "./pages/Expenses";
 import Reports from "./pages/Reports";
 import DriverRoutes from "./pages/DriverRoutes";
+import DriverExpenses from "./pages/DriverExpenses";
 import ManageDrivers from "./pages/ManageDrivers";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="expenses" element={<Expenses />} />
               <Route path="reports" element={<Reports />} />
               <Route path="my-routes" element={<DriverRoutes />} />
+              <Route path="my-expenses" element={<DriverExpenses />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             </Route>
             <Route path="*" element={<NotFound />} />

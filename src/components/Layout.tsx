@@ -2,7 +2,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogOut, Truck, Users, Map, BarChart, Settings } from 'lucide-react';
+import { LogOut, Truck, Users, Map, BarChart, Settings, Receipt } from 'lucide-react';
 
 const getNavigation = (userRole: string) => {
   const adminNav = [
@@ -18,6 +18,7 @@ const getNavigation = (userRole: string) => {
 
   const driverNav = [
     { name: 'Minhas Rotas', href: '/my-routes', icon: Map },
+    { name: 'Minhas Despesas', href: '/my-expenses', icon: Receipt },
     { name: 'Painel', href: '/', icon: BarChart },
   ];
 
