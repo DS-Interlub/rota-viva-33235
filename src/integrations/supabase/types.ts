@@ -265,7 +265,7 @@ export type Database = {
           base_departure_time: string | null
           created_at: string
           departure_time: string | null
-          driver_id: string
+          driver_id: string | null
           final_km: number | null
           id: string
           initial_km: number | null
@@ -274,14 +274,14 @@ export type Database = {
           status: string | null
           total_km: number | null
           updated_at: string
-          vehicle_id: string
+          vehicle_id: string | null
         }
         Insert: {
           base_arrival_time?: string | null
           base_departure_time?: string | null
           created_at?: string
           departure_time?: string | null
-          driver_id: string
+          driver_id?: string | null
           final_km?: number | null
           id?: string
           initial_km?: number | null
@@ -290,14 +290,14 @@ export type Database = {
           status?: string | null
           total_km?: number | null
           updated_at?: string
-          vehicle_id: string
+          vehicle_id?: string | null
         }
         Update: {
           base_arrival_time?: string | null
           base_departure_time?: string | null
           created_at?: string
           departure_time?: string | null
-          driver_id?: string
+          driver_id?: string | null
           final_km?: number | null
           id?: string
           initial_km?: number | null
@@ -306,7 +306,7 @@ export type Database = {
           status?: string | null
           total_km?: number | null
           updated_at?: string
-          vehicle_id?: string
+          vehicle_id?: string | null
         }
         Relationships: [
           {
