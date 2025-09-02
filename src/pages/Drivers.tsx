@@ -66,9 +66,15 @@ export default function Drivers() {
 
     try {
       if (editingDriver) {
+        // Atualizar motorista (sem o campo password que não existe na tabela)
         const { error } = await supabase
           .from('drivers')
-          .update(formData)
+          .update({
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            license_number: formData.license_number
+          })
           .eq('id', editingDriver.id);
         
         if (error) throw error;
@@ -77,10 +83,15 @@ export default function Drivers() {
           description: "Motorista atualizado com sucesso!",
         });
       } else {
-        // Criar motorista primeiro
+        // Criar motorista primeiro (sem o campo password que não existe na tabela)
         const { data: driverData, error: driverError } = await supabase
           .from('drivers')
-          .insert([formData])
+          .insert([{
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            license_number: formData.license_number
+          }])
           .select()
           .single();
         
