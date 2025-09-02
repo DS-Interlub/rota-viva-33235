@@ -19,7 +19,8 @@ export default function Drivers() {
     name: '',
     email: '',
     phone: '',
-    license_number: ''
+    license_number: '',
+    password: ''
   });
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -85,13 +86,11 @@ export default function Drivers() {
         
         if (driverError) throw driverError;
 
-        // Se tem email, criar conta de usuário automaticamente
-        if (formData.email) {
-          const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
-          
+        // Se tem email e senha, criar conta de usuário automaticamente
+        if (formData.email && formData.password) {
           const { error: authError } = await supabase.auth.signUp({
             email: formData.email,
-            password: tempPassword,
+            password: formData.password,
             options: {
               emailRedirectTo: `${window.location.origin}/`,
               data: {
@@ -111,13 +110,13 @@ export default function Drivers() {
           } else {
             toast({
               title: "Sucesso",
-              description: `Motorista e conta criados com sucesso! Email de confirmação enviado para ${formData.email}`,
+              description: `Motorista e conta criados com sucesso! O motorista pode fazer login com: ${formData.email}`,
             });
           }
         } else {
           toast({
             title: "Sucesso",
-            description: "Motorista cadastrado com sucesso! Adicione um email para criar conta de usuário.",
+            description: "Motorista cadastrado com sucesso! Para criar acesso ao sistema, adicione email e senha.",
           });
         }
       }
@@ -128,7 +127,8 @@ export default function Drivers() {
         name: '',
         email: '',
         phone: '',
-        license_number: ''
+        license_number: '',
+        password: ''
       });
       fetchDrivers();
     } catch (error) {
@@ -147,7 +147,8 @@ export default function Drivers() {
       name: driver.name,
       email: driver.email || '',
       phone: driver.phone || '',
-      license_number: driver.license_number || ''
+      license_number: driver.license_number || '',
+      password: ''
     });
     setIsDialogOpen(true);
   };
@@ -209,7 +210,8 @@ export default function Drivers() {
                   name: '',
                   email: '',
                   phone: '',
-                  license_number: ''
+                  license_number: '',
+                  password: ''
                 });
               }}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -258,6 +260,21 @@ export default function Drivers() {
                     onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
                   />
                 </div>
+                {!editingDriver && (
+                  <div>
+                    <Label htmlFor="password">Senha para acesso ao sistema</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="Digite a senha que o motorista usará para logar"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Deixe em branco se não quiser criar acesso ao sistema agora
+                    </p>
+                  </div>
+                )}
                 <Button type="submit" className="w-full">
                   {editingDriver ? 'Atualizar' : 'Cadastrar'}
                 </Button>
