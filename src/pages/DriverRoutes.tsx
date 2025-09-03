@@ -149,7 +149,6 @@ export default function DriverRoutes() {
         .update({ 
           status: 'completed',
           final_km: finalKm,
-          total_km: totalKm > 0 ? totalKm : null,
           base_arrival_time: kmFormData.base_arrival_time
         })
         .eq('id', selectedRoute.id);
