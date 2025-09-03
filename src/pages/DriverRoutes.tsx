@@ -328,55 +328,112 @@ export default function DriverRoutes() {
                     </div>
                   </div>
 
-                  {route.route_stops && route.route_stops.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold mb-2">Entregas:</h4>
-                      <div className="space-y-2">
-                        {route.route_stops
-                          .sort((a: any, b: any) => a.stop_number - b.stop_number)
-                          .map((stop: any) => (
-                          <div
-                            key={stop.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border ${
-                              stop.completed 
-                                ? 'bg-green-50 border-green-200 text-green-800' 
-                                : 'bg-gray-50 border-gray-200'
-                            }`}
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">#{stop.stop_number}</span>
-                                <span>{stop.customers?.name}</span>
-                                {stop.completed && <CheckCircle className="h-4 w-4 text-green-600" />}
-                              </div>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {stop.customers?.address}
-                              </p>
-                              {stop.arrival_time && stop.departure_time && (
-                                <p className="text-xs text-muted-foreground">
-                                  {stop.arrival_time} - {stop.departure_time}
-                                </p>
-                              )}
-                              {stop.receiver_name && (
-                                <p className="text-xs text-muted-foreground">
-                                  Recebido por: {stop.receiver_name}
-                                </p>
-                              )}
-                            </div>
-                            {route.status === 'in_progress' && !stop.completed && (
-                              <Button
-                                size="sm"
-                                onClick={() => openStopDialog(route, stop)}
+                      {route.route_stops && route.route_stops.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold mb-2">Entregas:</h4>
+                          <div className="space-y-3">
+                            {route.route_stops
+                              .sort((a: any, b: any) => a.stop_number - b.stop_number)
+                              .map((stop: any) => (
+                              <div
+                                key={stop.id}
+                                className={`rounded-lg border ${
+                                  stop.completed 
+                                    ? 'bg-green-50 border-green-200' 
+                                    : 'bg-gray-50 border-gray-200'
+                                }`}
                               >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Entregar
-                              </Button>
-                            )}
+                                <div className="flex items-center justify-between p-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">#{stop.stop_number}</span>
+                                      <span>{stop.customers?.name}</span>
+                                      {stop.completed && <CheckCircle className="h-4 w-4 text-green-600" />}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      {stop.customers?.address}
+                                    </p>
+                                  </div>
+                                  {route.status === 'in_progress' && !stop.completed && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openStopDialog(route, stop)}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                      Entregar
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                {/* Detalhes da entrega quando completada */}
+                                {stop.completed && (
+                                  <div className="px-3 pb-3 border-t border-green-200 mt-2 pt-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                      <div className="text-sm">
+                                        <strong>Horários:</strong> {stop.arrival_time || 'N/A'} - {stop.departure_time || 'N/A'}
+                                      </div>
+                                      <div className="text-sm">
+                                        <strong>Recebido por:</strong> {stop.receiver_name || 'N/A'}
+                                      </div>
+                                      {stop.receiver_email && (
+                                        <div className="text-sm">
+                                          <strong>E-mail:</strong> {stop.receiver_email}
+                                        </div>
+                                      )}
+                                      {stop.receiver_department && (
+                                        <div className="text-sm">
+                                          <strong>Setor:</strong> {stop.receiver_department}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {stop.notes && (
+                                      <div className="mb-3">
+                                        <strong className="text-sm">Observações:</strong>
+                                        <p className="text-sm text-muted-foreground mt-1">{stop.notes}</p>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Fotos da entrega */}
+                                    {stop.photos && stop.photos.length > 0 && (
+                                      <div className="mb-3">
+                                        <strong className="text-sm">Fotos da Entrega:</strong>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                                          {stop.photos.map((photoUrl: string, index: number) => (
+                                            <div key={index} className="relative group">
+                                              <img
+                                                src={photoUrl}
+                                                alt={`Foto da entrega ${index + 1}`}
+                                                className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                                                onClick={() => window.open(photoUrl, '_blank')}
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Assinatura */}
+                                    {stop.signature_url && (
+                                      <div>
+                                        <strong className="text-sm">Assinatura:</strong>
+                                        <div className="mt-2">
+                                          <img
+                                            src={stop.signature_url}
+                                            alt="Assinatura do responsável"
+                                            className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80"
+                                            onClick={() => window.open(stop.signature_url, '_blank')}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                        </div>
+                      )}
                 </div>
               </CardContent>
             </Card>

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale, UserPlus } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale, UserPlus, CheckCircle } from 'lucide-react';
 import { RouteSplitter } from '@/components/RouteSplitter';
 import { RouteMerger } from '@/components/RouteMerger';
 import { RouteAssignment } from '@/components/RouteAssignment';
@@ -47,7 +47,21 @@ export default function Routes() {
           *,
           drivers(name),
           vehicles(plate, brand, model),
-          route_stops(id, customer_id, completed, customers(name))
+          route_stops(
+            id, 
+            customer_id, 
+            completed, 
+            stop_number,
+            arrival_time,
+            departure_time,
+            receiver_name,
+            receiver_email,
+            receiver_department,
+            notes,
+            photos,
+            signature_url,
+            customers(name, address)
+          )
         `).order('route_date', { ascending: false }),
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, plate, brand, model'),
@@ -594,7 +608,7 @@ onClick={() => setSelectedRouteForAssignment(route)}
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <div>
@@ -623,6 +637,103 @@ onClick={() => setSelectedRouteForAssignment(route)}
                     </p>
                   </div>
                 </div>
+
+                {/* Detalhes das entregas */}
+                {route.route_stops && route.route_stops.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-semibold mb-3">Entregas:</h4>
+                    <div className="space-y-3">
+                      {route.route_stops
+                        .sort((a: any, b: any) => a.stop_number - b.stop_number)
+                        .map((stop: any) => (
+                        <div
+                          key={stop.id}
+                          className={`rounded-lg border ${
+                            stop.completed 
+                              ? 'bg-green-50 border-green-200' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <div className="p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-medium">#{stop.stop_number}</span>
+                              <span>{stop.customers?.name}</span>
+                              {stop.completed && <CheckCircle className="h-4 w-4 text-green-600" />}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {stop.customers?.address}
+                            </p>
+                            
+                            {/* Detalhes da entrega quando completada */}
+                            {stop.completed && (
+                              <div className="border-t border-green-200 mt-3 pt-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                  <div className="text-sm">
+                                    <strong>Horários:</strong> {stop.arrival_time || 'N/A'} - {stop.departure_time || 'N/A'}
+                                  </div>
+                                  <div className="text-sm">
+                                    <strong>Recebido por:</strong> {stop.receiver_name || 'N/A'}
+                                  </div>
+                                  {stop.receiver_email && (
+                                    <div className="text-sm">
+                                      <strong>E-mail:</strong> {stop.receiver_email}
+                                    </div>
+                                  )}
+                                  {stop.receiver_department && (
+                                    <div className="text-sm">
+                                      <strong>Setor:</strong> {stop.receiver_department}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {stop.notes && (
+                                  <div className="mb-3">
+                                    <strong className="text-sm">Observações:</strong>
+                                    <p className="text-sm text-muted-foreground mt-1">{stop.notes}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Fotos da entrega */}
+                                {stop.photos && stop.photos.length > 0 && (
+                                  <div className="mb-3">
+                                    <strong className="text-sm">Fotos da Entrega:</strong>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                                      {stop.photos.map((photoUrl: string, index: number) => (
+                                        <div key={index} className="relative group">
+                                          <img
+                                            src={photoUrl}
+                                            alt={`Foto da entrega ${index + 1}`}
+                                            className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
+                                            onClick={() => window.open(photoUrl, '_blank')}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Assinatura */}
+                                {stop.signature_url && (
+                                  <div>
+                                    <strong className="text-sm">Assinatura:</strong>
+                                    <div className="mt-2">
+                                      <img
+                                        src={stop.signature_url}
+                                        alt="Assinatura do responsável"
+                                        className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80"
+                                        onClick={() => window.open(stop.signature_url, '_blank')}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="mt-4 flex gap-2 flex-wrap">
                   <Button variant="outline" size="sm">
