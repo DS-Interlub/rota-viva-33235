@@ -10,6 +10,8 @@ import { MapPin, Clock, CheckCircle, Camera, PenTool, Play, Square } from 'lucid
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import PhotoCapture from '@/components/PhotoCapture';
+import SignatureCapture from '@/components/SignatureCapture';
 
 export default function DriverRoutes() {
   const [routes, setRoutes] = useState([]);
@@ -34,6 +36,8 @@ export default function DriverRoutes() {
     base_departure_time: '',
     base_arrival_time: ''
   });
+  const [isPhotoCaptureOpen, setIsPhotoCaptureOpen] = useState(false);
+  const [isSignatureCaptureOpen, setIsSignatureCaptureOpen] = useState(false);
   const { toast } = useToast();
   const { profile, user } = useAuth();
 
@@ -454,13 +458,21 @@ export default function DriverRoutes() {
             </div>
             
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setIsPhotoCaptureOpen(true)}
+              >
                 <Camera className="h-4 w-4 mr-2" />
-                Adicionar Foto
+                Fotos ({stopFormData.photos.length})
               </Button>
-              <Button variant="outline" className="flex-1">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setIsSignatureCaptureOpen(true)}
+              >
                 <PenTool className="h-4 w-4 mr-2" />
-                Coletar Assinatura
+                {stopFormData.signature_url ? 'Editar Assinatura' : 'Coletar Assinatura'}
               </Button>
             </div>
 
@@ -471,6 +483,30 @@ export default function DriverRoutes() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Photo Capture Dialog */}
+      {selectedRoute && selectedStop && (
+        <PhotoCapture
+          isOpen={isPhotoCaptureOpen}
+          onClose={() => setIsPhotoCaptureOpen(false)}
+          onPhotosChange={(photos) => setStopFormData({ ...stopFormData, photos })}
+          currentPhotos={stopFormData.photos}
+          routeId={selectedRoute.id}
+          stopId={selectedStop.id}
+        />
+      )}
+
+      {/* Signature Capture Dialog */}
+      {selectedRoute && selectedStop && (
+        <SignatureCapture
+          isOpen={isSignatureCaptureOpen}
+          onClose={() => setIsSignatureCaptureOpen(false)}
+          onSignatureChange={(signature_url) => setStopFormData({ ...stopFormData, signature_url })}
+          currentSignature={stopFormData.signature_url}
+          routeId={selectedRoute.id}
+          stopId={selectedStop.id}
+        />
+      )}
 
       {/* KM Input Dialog */}
       <Dialog open={isKmDialogOpen} onOpenChange={setIsKmDialogOpen}>
