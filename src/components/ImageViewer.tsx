@@ -35,10 +35,13 @@ export default function ImageViewer({ src, alt, isOpen, onClose, title }: ImageV
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+      <DialogContent className="max-w-6xl max-h-[95vh] p-0" aria-describedby="image-viewer-description">
+        <div id="image-viewer-description" className="sr-only">
+          Visualização ampliada da imagem. Use os controles para fazer zoom, rotacionar e baixar a imagem.
+        </div>
         <DialogHeader className="p-4 pb-2">
           <div className="flex items-center justify-between">
-            <DialogTitle>{title || alt}</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{title || alt}</DialogTitle>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handleZoomOut}>
                 <ZoomOut className="h-4 w-4" />
@@ -63,15 +66,22 @@ export default function ImageViewer({ src, alt, isOpen, onClose, title }: ImageV
           </div>
         </DialogHeader>
         
-        <div className="flex-1 overflow-auto bg-muted/20 p-4">
-          <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex-1 overflow-auto bg-background/50 p-4">
+          <div className="flex items-center justify-center min-h-[70vh]">
             <img
               src={src}
               alt={alt}
-              className="max-w-full max-h-full object-contain transition-transform duration-200 bg-white border rounded shadow-lg"
+              className="max-w-full max-h-full object-contain transition-transform duration-300 ease-in-out shadow-2xl border-2 border-border rounded-lg"
               style={{
                 transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                transformOrigin: 'center center'
+                transformOrigin: 'center center',
+                backgroundColor: 'white',
+                padding: '8px'
+              }}
+              onLoad={() => console.log('Image loaded successfully:', src)}
+              onError={(e) => {
+                console.error('Failed to load image:', src);
+                console.error('Error details:', e);
               }}
             />
           </div>

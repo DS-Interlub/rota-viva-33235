@@ -429,18 +429,22 @@ export default function DriverRoutes() {
                                           {stop.photos.map((photoUrl: string, index: number) => (
                                             <div key={index} className="relative group">
                                            <img
-                                             src={photoUrl}
-                                             alt={`Foto da entrega ${index + 1}`}
-                                             className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-all"
-                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
-                                           />
-                                           <Button
-                                             size="sm"
-                                             variant="ghost"
-                                             className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
-                                           >
-                                             <Eye className="h-4 w-4" />
+                                              src={photoUrl}
+                                              alt={`Foto da entrega ${index + 1}`}
+                                              className="w-full h-24 object-cover rounded-lg border-2 border-border cursor-pointer hover:opacity-80 transition-all shadow-md bg-white"
+                                              onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                              onError={(e) => {
+                                                console.error('Failed to load photo:', photoUrl);
+                                                e.currentTarget.style.display = 'none';
+                                              }}
+                                            />
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 hover:bg-black/30"
+                                              onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                            >
+                                              <Eye className="h-4 w-4 text-white" />
                                            </Button>
                                             </div>
                                           ))}
@@ -452,14 +456,18 @@ export default function DriverRoutes() {
                                     {stop.signature_url && (
                                       <div>
                                         <strong className="text-sm">Assinatura:</strong>
-                                        <div className="mt-2">
-                                           <img
-                                             src={stop.signature_url}
-                                             alt="Assinatura do responsável"
-                                             className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80 transition-all"
-                                             onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
-                                           />
-                                        </div>
+                                         <div className="mt-2">
+                                            <img
+                                              src={stop.signature_url}
+                                              alt="Assinatura do responsável"
+                                              className="max-w-sm h-24 object-contain border-2 border-border rounded-lg bg-white cursor-pointer hover:opacity-80 transition-all shadow-md"
+                                              onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
+                                              onError={(e) => {
+                                                console.error('Failed to load signature:', stop.signature_url);
+                                                e.currentTarget.style.display = 'none';
+                                              }}
+                                            />
+                                         </div>
                                       </div>
                                     )}
                                   </div>
