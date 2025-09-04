@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale, UserPlus, CheckCircle } from 'lucide-react';
+import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Scale, UserPlus, CheckCircle, Eye } from 'lucide-react';
 import { RouteSplitter } from '@/components/RouteSplitter';
 import { RouteMerger } from '@/components/RouteMerger';
 import { RouteAssignment } from '@/components/RouteAssignment';
+import DateFilters from '@/components/DateFilters';
+import ImageViewer from '@/components/ImageViewer';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,38 +33,48 @@ export default function Routes() {
   const [shouldSplitOnCreate, setShouldSplitOnCreate] = useState(false);
   const [splitMethod, setSplitMethod] = useState<'weight' | 'volume' | 'stops'>('weight');
   const [numberOfRoutesToCreate, setNumberOfRoutesToCreate] = useState(2);
+  const [dateFilters, setDateFilters] = useState<{startDate?: string, endDate?: string}>({});
+  const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
   const { toast } = useToast();
   const { profile } = useAuth();
 
   const isAdmin = profile?.role === 'admin';
 
-  useEffect(() => {
-    fetchData();
-  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
+      let routesQuery = supabase.from('routes').select(`
+        *,
+        drivers(name),
+        vehicles(plate, brand, model),
+        route_stops(
+          id, 
+          customer_id, 
+          completed, 
+          stop_number,
+          arrival_time,
+          departure_time,
+          receiver_name,
+          receiver_email,
+          receiver_department,
+          notes,
+          photos,
+          signature_url,
+          customers(name, address)
+        )
+      `);
+
+      // Apply date filters
+      if (dateFilters.startDate && dateFilters.endDate) {
+        routesQuery = routesQuery
+          .gte('route_date', dateFilters.startDate)
+          .lte('route_date', dateFilters.endDate);
+      }
+
+      routesQuery = routesQuery.order('route_date', { ascending: false });
+
       const [routesResult, driversResult, vehiclesResult, customersResult] = await Promise.all([
-        supabase.from('routes').select(`
-          *,
-          drivers(name),
-          vehicles(plate, brand, model),
-          route_stops(
-            id, 
-            customer_id, 
-            completed, 
-            stop_number,
-            arrival_time,
-            departure_time,
-            receiver_name,
-            receiver_email,
-            receiver_department,
-            notes,
-            photos,
-            signature_url,
-            customers(name, address)
-          )
-        `).order('route_date', { ascending: false }),
+        routesQuery,
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, plate, brand, model'),
         supabase.from('customers').select('id, name, address')
@@ -87,7 +99,11 @@ export default function Routes() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilters, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const createRoute = async () => {
     if (selectedCustomers.length === 0 || !selectedDate) {
@@ -316,7 +332,7 @@ export default function Routes() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = useCallback((status: string) => {
     const statusMap = {
       draft: { label: 'Rascunho', variant: 'outline' as const },
       pending: { label: 'Pendente', variant: 'outline' as const },
@@ -326,7 +342,15 @@ export default function Routes() {
     
     const statusInfo = statusMap[status as keyof typeof statusMap] || statusMap.pending;
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
+  }, []);
+
+  const openImageViewer = (src: string, alt: string, title: string = '') => {
+    setSelectedImage({ src, alt, title });
   };
+
+  const filteredRoutes = useMemo(() => {
+    return routes;
+  }, [routes]);
 
   if (loading) {
     return <div className="flex justify-center p-8">Carregando rotas...</div>;
@@ -562,25 +586,31 @@ export default function Routes() {
         )}
       </div>
 
-      {routes.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma rota encontrada</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Comece criando sua primeira rota de entrega
-            </p>
-            {isAdmin && (
-              <Button onClick={() => setIsDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Criar primeira rota
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {routes.map((route: any) => (
+      <div className="grid gap-6 lg:grid-cols-4">
+        <div className="lg:col-span-1">
+          <DateFilters onFilterChange={setDateFilters} />
+        </div>
+        
+        <div className="lg:col-span-3">
+          {filteredRoutes.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Nenhuma rota encontrada</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  Comece criando sua primeira rota de entrega
+                </p>
+                {isAdmin && (
+                  <Button onClick={() => setIsDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Criar primeira rota
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {filteredRoutes.map((route: any) => (
             <Card key={route.id}>
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -700,12 +730,20 @@ onClick={() => setSelectedRouteForAssignment(route)}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                                       {stop.photos.map((photoUrl: string, index: number) => (
                                         <div key={index} className="relative group">
-                                          <img
-                                            src={photoUrl}
-                                            alt={`Foto da entrega ${index + 1}`}
-                                            className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                                            onClick={() => window.open(photoUrl, '_blank')}
-                                          />
+                                           <img
+                                             src={photoUrl}
+                                             alt={`Foto da entrega ${index + 1}`}
+                                             className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-all"
+                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                           />
+                                           <Button
+                                             size="sm"
+                                             variant="ghost"
+                                             className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                           >
+                                             <Eye className="h-4 w-4" />
+                                           </Button>
                                         </div>
                                       ))}
                                     </div>
@@ -717,12 +755,12 @@ onClick={() => setSelectedRouteForAssignment(route)}
                                   <div>
                                     <strong className="text-sm">Assinatura:</strong>
                                     <div className="mt-2">
-                                      <img
-                                        src={stop.signature_url}
-                                        alt="Assinatura do responsável"
-                                        className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80"
-                                        onClick={() => window.open(stop.signature_url, '_blank')}
-                                      />
+                                       <img
+                                         src={stop.signature_url}
+                                         alt="Assinatura do responsável"
+                                         className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80 transition-all"
+                                         onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
+                                       />
                                     </div>
                                   </div>
                                 )}
@@ -759,8 +797,21 @@ onClick={() => setSelectedRouteForAssignment(route)}
                 </div>
               </CardContent>
             </Card>
-          ))}
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Image Viewer Modal */}
+      {selectedImage && (
+        <ImageViewer
+          src={selectedImage.src}
+          alt={selectedImage.alt}
+          title={selectedImage.title}
+          isOpen={true}
+          onClose={() => setSelectedImage(null)}
+        />
       )}
 
       {/* Modais de Divisão, Mesclagem e Atribuição */}

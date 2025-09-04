@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,12 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { MapPin, Clock, CheckCircle, Camera, PenTool, Play, Square } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, Camera, PenTool, Play, Square, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import PhotoCapture from '@/components/PhotoCapture';
 import SignatureCapture from '@/components/SignatureCapture';
+import DateFilters from '@/components/DateFilters';
+import ImageViewer from '@/components/ImageViewer';
 
 export default function DriverRoutes() {
   const [routes, setRoutes] = useState([]);
@@ -38,22 +40,19 @@ export default function DriverRoutes() {
   });
   const [isPhotoCaptureOpen, setIsPhotoCaptureOpen] = useState(false);
   const [isSignatureCaptureOpen, setIsSignatureCaptureOpen] = useState(false);
+  const [dateFilters, setDateFilters] = useState<{startDate?: string, endDate?: string}>({});
+  const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
   const { toast } = useToast();
   const { profile, user } = useAuth();
 
   const isDriver = profile?.role === 'driver';
 
-  useEffect(() => {
-    if (isDriver) {
-      fetchDriverRoutes();
-    }
-  }, [isDriver, profile]);
 
-  const fetchDriverRoutes = async () => {
+  const fetchDriverRoutes = useCallback(async () => {
     if (!profile?.driver_id) return;
 
     try {
-      const { data, error } = await supabase
+      let routesQuery = supabase
         .from('routes')
         .select(`
           *,
@@ -63,8 +62,16 @@ export default function DriverRoutes() {
             customers(name, address)
           )
         `)
-        .eq('driver_id', profile.driver_id)
-        .order('route_date', { ascending: false });
+        .eq('driver_id', profile.driver_id);
+
+      // Apply date filters
+      if (dateFilters.startDate && dateFilters.endDate) {
+        routesQuery = routesQuery
+          .gte('route_date', dateFilters.startDate)
+          .lte('route_date', dateFilters.endDate);
+      }
+
+      const { data, error } = await routesQuery.order('route_date', { ascending: false });
 
       if (error) throw error;
       setRoutes(data || []);
@@ -78,7 +85,13 @@ export default function DriverRoutes() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile?.driver_id, dateFilters, toast]);
+
+  useEffect(() => {
+    if (isDriver) {
+      fetchDriverRoutes();
+    }
+  }, [isDriver, fetchDriverRoutes]);
 
   const openKmDialog = (route: any, action: 'start' | 'complete') => {
     setSelectedRoute(route);
@@ -233,7 +246,7 @@ export default function DriverRoutes() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = useCallback((status: string) => {
     const statusMap = {
       pending: { label: 'Pendente', variant: 'outline' as const, color: 'text-yellow-600' },
       in_progress: { label: 'Em andamento', variant: 'default' as const, color: 'text-blue-600' },
@@ -242,7 +255,15 @@ export default function DriverRoutes() {
     
     const statusInfo = statusMap[status as keyof typeof statusMap] || statusMap.pending;
     return <Badge variant={statusInfo.variant} className={statusInfo.color}>{statusInfo.label}</Badge>;
+  }, []);
+
+  const openImageViewer = (src: string, alt: string, title: string = '') => {
+    setSelectedImage({ src, alt, title });
   };
+
+  const filteredRoutes = useMemo(() => {
+    return routes;
+  }, [routes]);
 
   if (!isDriver) {
     return (
@@ -268,19 +289,25 @@ export default function DriverRoutes() {
         </p>
       </div>
 
-      {routes.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma rota encontrada</h3>
-            <p className="text-muted-foreground text-center">
-              Você não possui rotas atribuídas no momento
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {routes.map((route: any) => (
+      <div className="grid gap-6 lg:grid-cols-4">
+        <div className="lg:col-span-1">
+          <DateFilters onFilterChange={setDateFilters} />
+        </div>
+        
+        <div className="lg:col-span-3">
+          {filteredRoutes.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Nenhuma rota encontrada</h3>
+                <p className="text-muted-foreground text-center">
+                  Você não possui rotas atribuídas no momento
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {filteredRoutes.map((route: any) => (
             <Card key={route.id} className="overflow-hidden">
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -401,12 +428,20 @@ export default function DriverRoutes() {
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                                           {stop.photos.map((photoUrl: string, index: number) => (
                                             <div key={index} className="relative group">
-                                              <img
-                                                src={photoUrl}
-                                                alt={`Foto da entrega ${index + 1}`}
-                                                className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80"
-                                                onClick={() => window.open(photoUrl, '_blank')}
-                                              />
+                                           <img
+                                             src={photoUrl}
+                                             alt={`Foto da entrega ${index + 1}`}
+                                             className="w-full h-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-all"
+                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                           />
+                                           <Button
+                                             size="sm"
+                                             variant="ghost"
+                                             className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                             onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                           >
+                                             <Eye className="h-4 w-4" />
+                                           </Button>
                                             </div>
                                           ))}
                                         </div>
@@ -418,12 +453,12 @@ export default function DriverRoutes() {
                                       <div>
                                         <strong className="text-sm">Assinatura:</strong>
                                         <div className="mt-2">
-                                          <img
-                                            src={stop.signature_url}
-                                            alt="Assinatura do responsável"
-                                            className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80"
-                                            onClick={() => window.open(stop.signature_url, '_blank')}
-                                          />
+                                           <img
+                                             src={stop.signature_url}
+                                             alt="Assinatura do responsável"
+                                             className="max-w-xs h-20 object-contain border rounded-md bg-white cursor-pointer hover:opacity-80 transition-all"
+                                             onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
+                                           />
                                         </div>
                                       </div>
                                     )}
@@ -437,8 +472,21 @@ export default function DriverRoutes() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Image Viewer Modal */}
+      {selectedImage && (
+        <ImageViewer
+          src={selectedImage.src}
+          alt={selectedImage.alt}
+          title={selectedImage.title}
+          isOpen={true}
+          onClose={() => setSelectedImage(null)}
+        />
       )}
 
       {/* Stop Completion Dialog */}
