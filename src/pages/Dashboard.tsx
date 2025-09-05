@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, Package, Truck, Users } from 'lucide-react';
+import { Calendar, Package, Truck, Users, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import FirstAdminSetup from '@/components/FirstAdminSetup';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalRoutes: 0,
     completedRoutes: 0,
@@ -16,29 +17,19 @@ export default function Dashboard() {
     totalCustomers: 0,
   });
   const [todayRoutes, setTodayRoutes] = useState([]);
-  const [hasAdminUser, setHasAdminUser] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (user) {
-      checkForAdminUser();
       fetchStats();
       fetchTodayRoutes();
     }
   }, [user]);
 
-  const checkForAdminUser = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'admin')
-        .limit(1);
-      
-      if (error) throw error;
-      setHasAdminUser(data.length > 0);
-    } catch (error) {
-      console.error('Error checking for admin:', error);
-      setHasAdminUser(true); // Default to true to avoid showing setup
+  const handleViewRouteDetails = (routeId: string) => {
+    if (profile?.role === 'admin') {
+      navigate('/routes');
+    } else {
+      navigate('/my-routes');
     }
   };
 
@@ -92,24 +83,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleAdminCreated = () => {
-    setHasAdminUser(true);
-    // Reload the page to update the profile
-    window.location.reload();
-  };
-
-  // Show admin setup if no admin exists
-  if (hasAdminUser === false) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <FirstAdminSetup onAdminCreated={handleAdminCreated} />
-      </div>
-    );
-  }
-
-  if (hasAdminUser === null) {
-    return <div className="text-center py-8">Carregando...</div>;
-  }
 
   return (
     <div className="space-y-6">
@@ -201,8 +174,16 @@ export default function Dashboard() {
                       Status: {route.status === 'pending' ? 'Pendente' : 
                                route.status === 'in_progress' ? 'Em andamento' : 'Concluída'}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                      Data: {new Date(route.route_date).toLocaleDateString('pt-BR')}
+                    </p>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleViewRouteDetails(route.id)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
                     Ver Detalhes
                   </Button>
                 </div>
