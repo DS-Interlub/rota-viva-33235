@@ -42,6 +42,8 @@ export default function DriverRoutes() {
   const [isSignatureCaptureOpen, setIsSignatureCaptureOpen] = useState(false);
   const [dateFilters, setDateFilters] = useState<{startDate?: string, endDate?: string}>({});
   const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
+  const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  const [signedUrls, setSignedUrls] = useState<{[key: string]: string}>({});
   const { toast } = useToast();
   const { profile, user } = useAuth();
 
@@ -75,6 +77,9 @@ export default function DriverRoutes() {
 
       if (error) throw error;
       setRoutes(data || []);
+      
+      // Generate signed URLs for private images
+      await generateSignedUrls(data || []);
     } catch (error) {
       console.error('Erro ao buscar rotas:', error);
       toast({
@@ -86,6 +91,76 @@ export default function DriverRoutes() {
       setLoading(false);
     }
   }, [profile?.driver_id, dateFilters, toast]);
+
+  const generateSignedUrls = async (routesData: any[]) => {
+    const urlsToSign: {[key: string]: string} = {};
+    
+    for (const route of routesData) {
+      if (route.route_stops) {
+        for (const stop of route.route_stops) {
+          // Handle photos
+          if (stop.photos && Array.isArray(stop.photos)) {
+            for (let i = 0; i < stop.photos.length; i++) {
+              const photoUrl = stop.photos[i];
+              if (photoUrl && !photoUrl.includes('signed')) {
+                try {
+                  // Extract the path from the full URL
+                  const urlParts = photoUrl.split('/storage/v1/object/public/');
+                  if (urlParts.length > 1) {
+                    const path = urlParts[1];
+                    const { data: signedData } = await supabase.storage
+                      .from('delivery-photos')
+                      .createSignedUrl(path.replace('delivery-photos/', ''), 3600); // 1 hour expiry
+                    
+                    if (signedData?.signedUrl) {
+                      urlsToSign[photoUrl] = signedData.signedUrl;
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error generating signed URL for photo:', error);
+                }
+              }
+            }
+          }
+          
+          // Handle signature
+          if (stop.signature_url && !stop.signature_url.includes('signed')) {
+            try {
+              const urlParts = stop.signature_url.split('/storage/v1/object/public/');
+              if (urlParts.length > 1) {
+                const path = urlParts[1];
+                const { data: signedData } = await supabase.storage
+                  .from('signatures')
+                  .createSignedUrl(path.replace('signatures/', ''), 3600); // 1 hour expiry
+                
+                if (signedData?.signedUrl) {
+                  urlsToSign[stop.signature_url] = signedData.signedUrl;
+                }
+              }
+            } catch (error) {
+              console.error('Error generating signed URL for signature:', error);
+            }
+          }
+        }
+      }
+    }
+    
+    setSignedUrls(urlsToSign);
+  };
+
+  const getSignedUrl = (originalUrl: string) => {
+    return signedUrls[originalUrl] || originalUrl;
+  };
+
+  const toggleRouteExpansion = (routeId: string) => {
+    const newExpanded = new Set(expandedRoutes);
+    if (newExpanded.has(routeId)) {
+      newExpanded.delete(routeId);
+    } else {
+      newExpanded.add(routeId);
+    }
+    setExpandedRoutes(newExpanded);
+  };
 
   useEffect(() => {
     if (isDriver) {
@@ -258,7 +333,8 @@ export default function DriverRoutes() {
   }, []);
 
   const openImageViewer = (src: string, alt: string, title: string = '') => {
-    setSelectedImage({ src, alt, title });
+    const signedUrl = getSignedUrl(src);
+    setSelectedImage({ src: signedUrl, alt, title });
   };
 
   const filteredRoutes = useMemo(() => {
@@ -334,6 +410,14 @@ export default function DriverRoutes() {
                         Finalizar
                       </Button>
                     )}
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => toggleRouteExpansion(route.id)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      {expandedRoutes.has(route.id) ? 'Ocultar' : 'Detalhes'}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -355,7 +439,7 @@ export default function DriverRoutes() {
                     </div>
                   </div>
 
-                      {route.route_stops && route.route_stops.length > 0 && (
+                      {route.route_stops && route.route_stops.length > 0 && expandedRoutes.has(route.id) && (
                         <div>
                           <h4 className="font-semibold mb-2">Entregas:</h4>
                           <div className="space-y-3">
@@ -428,16 +512,17 @@ export default function DriverRoutes() {
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                                           {stop.photos.map((photoUrl: string, index: number) => (
                                             <div key={index} className="relative group">
-                                           <img
-                                              src={photoUrl}
-                                              alt={`Foto da entrega ${index + 1}`}
-                                              className="w-full h-24 object-cover rounded-lg border-2 border-border cursor-pointer hover:opacity-80 transition-all shadow-md bg-white"
-                                              onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
-                                              onError={(e) => {
-                                                console.error('Failed to load photo:', photoUrl);
-                                                e.currentTarget.style.display = 'none';
-                                              }}
-                                            />
+                                            <img
+                                               src={getSignedUrl(photoUrl)}
+                                               alt={`Foto da entrega ${index + 1}`}
+                                               className="w-full h-24 object-cover rounded-lg border-2 border-border cursor-pointer hover:opacity-80 transition-all shadow-md bg-white"
+                                               onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
+                                               onError={(e) => {
+                                                 console.error('Failed to load photo:', photoUrl);
+                                                 e.currentTarget.src = '/placeholder.svg';
+                                                 e.currentTarget.classList.add('opacity-50');
+                                               }}
+                                             />
                                             <Button
                                               size="sm"
                                               variant="ghost"
@@ -457,16 +542,17 @@ export default function DriverRoutes() {
                                       <div>
                                         <strong className="text-sm">Assinatura:</strong>
                                          <div className="mt-2">
-                                            <img
-                                              src={stop.signature_url}
-                                              alt="Assinatura do responsável"
-                                              className="max-w-sm h-24 object-contain border-2 border-border rounded-lg bg-white cursor-pointer hover:opacity-80 transition-all shadow-md"
-                                              onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
-                                              onError={(e) => {
-                                                console.error('Failed to load signature:', stop.signature_url);
-                                                e.currentTarget.style.display = 'none';
-                                              }}
-                                            />
+                                             <img
+                                               src={getSignedUrl(stop.signature_url)}
+                                               alt="Assinatura do responsável"
+                                               className="max-w-sm h-24 object-contain border-2 border-border rounded-lg bg-white cursor-pointer hover:opacity-80 transition-all shadow-md"
+                                               onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
+                                               onError={(e) => {
+                                                 console.error('Failed to load signature:', stop.signature_url);
+                                                 e.currentTarget.src = '/placeholder.svg';
+                                                 e.currentTarget.classList.add('opacity-50');
+                                               }}
+                                             />
                                          </div>
                                       </div>
                                     )}

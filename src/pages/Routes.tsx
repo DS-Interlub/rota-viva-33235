@@ -35,6 +35,8 @@ export default function Routes() {
   const [numberOfRoutesToCreate, setNumberOfRoutesToCreate] = useState(2);
   const [dateFilters, setDateFilters] = useState<{startDate?: string, endDate?: string}>({});
   const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
+  const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  const [signedUrls, setSignedUrls] = useState<{[key: string]: string}>({});
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -89,6 +91,12 @@ export default function Routes() {
       setDrivers(driversResult.data || []);
       setVehicles(vehiclesResult.data || []);
       setCustomers(customersResult.data || []);
+      
+      // Generate signed URLs for private images
+      await generateSignedUrls(routesResult.data || []);
+      
+      // Generate signed URLs for private images
+      await generateSignedUrls(routesResult.data || []);
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
       toast({
@@ -100,6 +108,76 @@ export default function Routes() {
       setLoading(false);
     }
   }, [dateFilters, toast]);
+
+  const generateSignedUrls = async (routesData: any[]) => {
+    const urlsToSign: {[key: string]: string} = {};
+    
+    for (const route of routesData) {
+      if (route.route_stops) {
+        for (const stop of route.route_stops) {
+          // Handle photos
+          if (stop.photos && Array.isArray(stop.photos)) {
+            for (let i = 0; i < stop.photos.length; i++) {
+              const photoUrl = stop.photos[i];
+              if (photoUrl && !photoUrl.includes('signed')) {
+                try {
+                  // Extract the path from the full URL
+                  const urlParts = photoUrl.split('/storage/v1/object/public/');
+                  if (urlParts.length > 1) {
+                    const path = urlParts[1];
+                    const { data: signedData } = await supabase.storage
+                      .from('delivery-photos')
+                      .createSignedUrl(path.replace('delivery-photos/', ''), 3600); // 1 hour expiry
+                    
+                    if (signedData?.signedUrl) {
+                      urlsToSign[photoUrl] = signedData.signedUrl;
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error generating signed URL for photo:', error);
+                }
+              }
+            }
+          }
+          
+          // Handle signature
+          if (stop.signature_url && !stop.signature_url.includes('signed')) {
+            try {
+              const urlParts = stop.signature_url.split('/storage/v1/object/public/');
+              if (urlParts.length > 1) {
+                const path = urlParts[1];
+                const { data: signedData } = await supabase.storage
+                  .from('signatures')
+                  .createSignedUrl(path.replace('signatures/', ''), 3600); // 1 hour expiry
+                
+                if (signedData?.signedUrl) {
+                  urlsToSign[stop.signature_url] = signedData.signedUrl;
+                }
+              }
+            } catch (error) {
+              console.error('Error generating signed URL for signature:', error);
+            }
+          }
+        }
+      }
+    }
+    
+    setSignedUrls(urlsToSign);
+  };
+
+  const getSignedUrl = (originalUrl: string) => {
+    return signedUrls[originalUrl] || originalUrl;
+  };
+
+  const toggleRouteExpansion = (routeId: string) => {
+    const newExpanded = new Set(expandedRoutes);
+    if (newExpanded.has(routeId)) {
+      newExpanded.delete(routeId);
+    } else {
+      newExpanded.add(routeId);
+    }
+    setExpandedRoutes(newExpanded);
+  };
 
   useEffect(() => {
     fetchData();
@@ -731,13 +809,14 @@ onClick={() => setSelectedRouteForAssignment(route)}
                                       {stop.photos.map((photoUrl: string, index: number) => (
                                          <div key={index} className="relative group">
                                             <img
-                                              src={photoUrl}
+                                              src={getSignedUrl(photoUrl)}
                                               alt={`Foto da entrega ${index + 1}`}
                                               className="w-full h-24 object-cover rounded-lg border-2 border-border cursor-pointer hover:opacity-80 transition-all shadow-md bg-white"
                                               onClick={() => openImageViewer(photoUrl, `Foto da entrega ${index + 1}`, `${stop.customers?.name} - Entrega #${stop.stop_number}`)}
                                               onError={(e) => {
                                                 console.error('Failed to load photo:', photoUrl);
-                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.src = '/placeholder.svg';
+                                                e.currentTarget.classList.add('opacity-50');
                                               }}
                                             />
                                             <Button
@@ -758,15 +837,16 @@ onClick={() => setSelectedRouteForAssignment(route)}
                                 {stop.signature_url && (
                                   <div>
                                     <strong className="text-sm">Assinatura:</strong>
-                                     <div className="mt-2">
+                                      <div className="mt-2">
                                         <img
-                                          src={stop.signature_url}
+                                          src={getSignedUrl(stop.signature_url)}
                                           alt="Assinatura do responsável"
                                           className="max-w-sm h-24 object-contain border-2 border-border rounded-lg bg-white cursor-pointer hover:opacity-80 transition-all shadow-md"
                                           onClick={() => openImageViewer(stop.signature_url, 'Assinatura do responsável', `${stop.customers?.name} - Assinatura #${stop.stop_number}`)}
                                           onError={(e) => {
                                             console.error('Failed to load signature:', stop.signature_url);
-                                            e.currentTarget.style.display = 'none';
+                                            e.currentTarget.src = '/placeholder.svg';
+                                            e.currentTarget.classList.add('opacity-50');
                                           }}
                                         />
                                      </div>
@@ -782,8 +862,13 @@ onClick={() => setSelectedRouteForAssignment(route)}
                 )}
                 
                 <div className="mt-4 flex gap-2 flex-wrap">
-                  <Button variant="outline" size="sm">
-                    Ver Detalhes
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => toggleRouteExpansion(route.id)}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    {expandedRoutes.has(route.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
                   </Button>
                   {isAdmin && (
                     <>
