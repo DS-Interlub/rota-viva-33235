@@ -5,16 +5,20 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, User, Phone, Mail, Edit2, Trash2 } from 'lucide-react';
+import { Plus, User, Phone, Mail, Edit2, Trash2, Upload, Route } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import ImportExcel from '@/components/ImportExcel';
+import DriverRoutes from '@/components/DriverRoutes';
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [selectedDriverRoutes, setSelectedDriverRoutes] = useState<{id: string, name: string} | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -204,7 +208,8 @@ export default function Drivers() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Motoristas</h1>
@@ -212,8 +217,13 @@ export default function Drivers() {
             Gerencie os motoristas da sua equipe
           </p>
         </div>
-        {isAdmin && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar Excel
+          </Button>
+          {isAdmin && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => {
                 setEditingDriver(null);
@@ -292,7 +302,8 @@ export default function Drivers() {
               </form>
             </DialogContent>
           </Dialog>
-        )}
+          )}
+        </div>
       </div>
 
       {drivers.length === 0 ? (
@@ -352,7 +363,13 @@ export default function Drivers() {
                       </Button>
                     </>
                   )}
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setSelectedDriverRoutes({id: driver.id, name: driver.name})}
+                  >
+                    <Route className="h-3 w-3 mr-1" />
                     Ver Rotas
                   </Button>
                 </div>
@@ -360,7 +377,24 @@ export default function Drivers() {
             </Card>
           ))}
         </div>
+        )}
+      </div>
+      
+      <ImportExcel
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportComplete={fetchDrivers}
+        type="drivers"
+      />
+      
+      {selectedDriverRoutes && (
+        <DriverRoutes
+          isOpen={!!selectedDriverRoutes}
+          onClose={() => setSelectedDriverRoutes(null)}
+          driverId={selectedDriverRoutes.id}
+          driverName={selectedDriverRoutes.name}
+        />
       )}
-    </div>
+    </>
   );
 }

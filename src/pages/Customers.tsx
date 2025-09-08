@@ -10,12 +10,16 @@ import { Plus, Building, MapPin, Phone, Mail, Upload, Edit2, Trash2 } from 'luci
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import ImportExcel from '@/components/ImportExcel';
+import CustomerDeliveries from '@/components/CustomerDeliveries';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [selectedCustomerDeliveries, setSelectedCustomerDeliveries] = useState<{id: string, name: string} | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -170,206 +174,229 @@ export default function Customers() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Clientes</h1>
-          <p className="text-muted-foreground">
-            Gerencie seus clientes e pontos de entrega
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Importar Excel
-          </Button>
-          {isAdmin && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
-                  setEditingCustomer(null);
-                  setFormData({
-                    name: '',
-                    address: '',
-                    city: '',
-                    state: '',
-                    zip_code: '',
-                    phone: '',
-                    email: '',
-                    is_transporter: false
-                  });
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Cliente
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
-                  <DialogDescription>
-                    {editingCustomer ? 'Edite as informações do cliente' : 'Cadastre um novo cliente'}
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Nome *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="address">Endereço *</Label>
-                    <Input
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="city">Cidade</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="state">Estado</Label>
-                      <Input
-                        id="state"
-                        value={formData.state}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="zip_code">CEP</Label>
-                    <Input
-                      id="zip_code"
-                      value={formData.zip_code}
-                      onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">Telefone</Label>
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">E-mail</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="is_transporter"
-                      checked={formData.is_transporter}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_transporter: checked })}
-                    />
-                    <Label htmlFor="is_transporter">É transportadora</Label>
-                  </div>
-                  <Button type="submit" className="w-full">
-                    {editingCustomer ? 'Atualizar' : 'Cadastrar'}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
-      </div>
-
-      {customers.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Building className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum cliente cadastrado</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Comece adicionando seus primeiros clientes ou importe de uma planilha
+    <>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Clientes</h1>
+            <p className="text-muted-foreground">
+              Gerencie seus clientes e pontos de entrega
             </p>
-            <div className="flex gap-2">
-              <Button variant="outline">
-                <Upload className="h-4 w-4 mr-2" />
-                Importar Excel
-              </Button>
-              {isAdmin && (
-                <Button onClick={() => setIsDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Cadastrar primeiro cliente
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {customers.map((customer: any) => (
-            <Card key={customer.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5" />
-                  {customer.name}
-                  {customer.is_transporter && (
-                    <Badge variant="secondary">Transportadora</Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {customer.city}, {customer.state}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{customer.address}</span>
-                </div>
-                
-                {customer.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{customer.phone}</span>
-                  </div>
-                )}
-                
-                {customer.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{customer.email}</span>
-                  </div>
-                )}
-                
-                <div className="flex gap-2 mt-4">
-                  {isAdmin && (
-                    <>
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(customer)}>
-                        <Edit2 className="h-3 w-3 mr-1" />
-                        Editar
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDelete(customer.id)}>
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Excluir
-                      </Button>
-                    </>
-                  )}
-                  <Button variant="outline" size="sm" className="flex-1">
-                    Ver Entregas
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar Excel
+            </Button>
+            {isAdmin && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingCustomer(null);
+                    setFormData({
+                      name: '',
+                      address: '',
+                      city: '',
+                      state: '',
+                      zip_code: '',
+                      phone: '',
+                      email: '',
+                      is_transporter: false
+                    });
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Novo Cliente
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
+                    <DialogDescription>
+                      {editingCustomer ? 'Edite as informações do cliente' : 'Cadastre um novo cliente'}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <Label htmlFor="name">Nome *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="address">Endereço *</Label>
+                      <Input
+                        id="address"
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="city">Cidade</Label>
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="state">Estado</Label>
+                        <Input
+                          id="state"
+                          value={formData.state}
+                          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="zip_code">CEP</Label>
+                      <Input
+                        id="zip_code"
+                        value={formData.zip_code}
+                        onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="phone">Telefone</Label>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="email">E-mail</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="is_transporter"
+                        checked={formData.is_transporter}
+                        onCheckedChange={(checked) => setFormData({ ...formData, is_transporter: checked })}
+                      />
+                      <Label htmlFor="is_transporter">É transportadora</Label>
+                    </div>
+                    <Button type="submit" className="w-full">
+                      {editingCustomer ? 'Atualizar' : 'Cadastrar'}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
+
+        {customers.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Building className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Nenhum cliente cadastrado</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                Comece adicionando seus primeiros clientes ou importe de uma planilha
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar Excel
+                </Button>
+                {isAdmin && (
+                  <Button onClick={() => setIsDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Cadastrar primeiro cliente
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {customers.map((customer: any) => (
+              <Card key={customer.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building className="h-5 w-5" />
+                    {customer.name}
+                    {customer.is_transporter && (
+                      <Badge variant="secondary">Transportadora</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {customer.city}, {customer.state}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{customer.address}</span>
+                  </div>
+                  
+                  {customer.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">{customer.phone}</span>
+                    </div>
+                  )}
+                  
+                  {customer.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">{customer.email}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-2 mt-4">
+                    {isAdmin && (
+                      <>
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(customer)}>
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Editar
+                        </Button>
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDelete(customer.id)}>
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Excluir
+                        </Button>
+                      </>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => setSelectedCustomerDeliveries({id: customer.id, name: customer.name})}
+                    >
+                      Ver Entregas
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+      
+      <ImportExcel
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImportComplete={fetchCustomers}
+        type="customers"
+      />
+      
+      {selectedCustomerDeliveries && (
+        <CustomerDeliveries
+          isOpen={!!selectedCustomerDeliveries}
+          onClose={() => setSelectedCustomerDeliveries(null)}
+          customerId={selectedCustomerDeliveries.id}
+          customerName={selectedCustomerDeliveries.name}
+        />
       )}
-    </div>
+    </>
   );
 }
