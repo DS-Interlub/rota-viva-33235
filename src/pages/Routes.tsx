@@ -9,8 +9,10 @@ import { Plus, MapPin, Clock, Truck, Edit2, Trash2, Route, Split, Merge, Zap, Sc
 import { RouteSplitter } from '@/components/RouteSplitter';
 import { RouteMerger } from '@/components/RouteMerger';
 import { RouteAssignment } from '@/components/RouteAssignment';
+import RouteOptimizer from '@/components/RouteOptimizer';
 import DateFilters from '@/components/DateFilters';
 import ImageViewer from '@/components/ImageViewer';
+import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,6 +39,7 @@ export default function Routes() {
   const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
   const [signedUrls, setSignedUrls] = useState<{[key: string]: string}>({});
+  const [selectedRouteForOptimization, setSelectedRouteForOptimization] = useState<string | null>(null);
   const { toast } = useToast();
   const { profile } = useAuth();
 
@@ -92,10 +95,7 @@ export default function Routes() {
       setVehicles(vehiclesResult.data || []);
       setCustomers(customersResult.data || []);
       
-      // Generate signed URLs for private images
-      await generateSignedUrls(routesResult.data || []);
-      
-      // Generate signed URLs for private images
+      // Generate signed URLs for private images (apenas uma vez)
       await generateSignedUrls(routesResult.data || []);
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
@@ -431,7 +431,27 @@ export default function Routes() {
   }, [routes]);
 
   if (loading) {
-    return <div className="flex justify-center p-8">Carregando rotas...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-96" />
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -870,6 +890,20 @@ onClick={() => setSelectedRouteForAssignment(route)}
                     <Eye className="h-3 w-3 mr-1" />
                     {expandedRoutes.has(route.id) ? 'Ocultar Detalhes' : 'Ver Detalhes'}
                   </Button>
+                  
+                  {/* Botão de Otimizar Rota - disponível apenas para rotas com paradas */}
+                  {route.route_stops && route.route_stops.length > 1 && (
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={() => setSelectedRouteForOptimization(route.id)}
+                      disabled={route.status === 'completed'}
+                    >
+                      <Zap className="h-3 w-3 mr-1" />
+                      Otimizar Rota
+                    </Button>
+                  )}
+                  
                   {isAdmin && (
                     <>
                       <Button 
@@ -935,6 +969,16 @@ onClick={() => setSelectedRouteForAssignment(route)}
           vehicles={vehicles}
           onClose={() => setSelectedRouteForAssignment(null)}
           onUpdate={fetchData}
+        />
+      )}
+
+      {/* Modal de Otimização de Rota */}
+      {selectedRouteForOptimization && (
+        <RouteOptimizer
+          isOpen={true}
+          routeId={selectedRouteForOptimization}
+          onClose={() => setSelectedRouteForOptimization(null)}
+          onOptimized={fetchData}
         />
       )}
     </div>
