@@ -59,8 +59,8 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
   const downloadTemplate = () => {
     const template = templates[type];
     const csv = [
-      template.headers.join(','),
-      template.example.join(',')
+      template.headers.join(';'),
+      template.example.join(';')
     ].join('\n');
     
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -73,25 +73,35 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
   };
 
   const parseCSV = (text: string): string[][] => {
-    const lines = text.split('\n').filter(line => line.trim());
-    return lines.map(line => {
-      const result = [];
+    const linesRaw = text.split(/\r?\n/).filter(line => line.trim());
+    if (linesRaw.length === 0) return [];
+
+    // Detect delimiter based on header line (Excel PT-BR often uses ';')
+    const headerLine = linesRaw[0];
+    const commaCount = (headerLine.match(/,/g) || []).length;
+    const semicolonCount = (headerLine.match(/;/g) || []).length;
+    const delimiter = semicolonCount > commaCount ? ';' : ',';
+
+    return linesRaw.map(line => {
+      const result: string[] = [];
       let current = '';
       let inQuotes = false;
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
+
         if (char === '"') {
+          // Handle escaped quotes within quoted fields
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; continue; }
           inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
+        } else if (char === delimiter && !inQuotes) {
           result.push(current.trim());
           current = '';
         } else {
           current += char;
         }
       }
-      
+
       result.push(current.trim());
       return result;
     });
