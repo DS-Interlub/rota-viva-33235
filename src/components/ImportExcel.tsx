@@ -21,7 +21,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
   const templates = {
     customers: {
       headers: ['name', 'address', 'city', 'state', 'zip_code', 'phone', 'email', 'is_transporter'],
-      example: 'Cliente Exemplo,Rua das Flores 123,São Paulo,SP,01234-567,11999887766,cliente@email.com,false'
+      example: 'Cliente Exemplo,Rua Exemplo 123,São Paulo,SP,01234-567,11999887766,cliente@exemplo.com,false'
     },
     drivers: {
       headers: ['name', 'email', 'phone', 'license_number'],

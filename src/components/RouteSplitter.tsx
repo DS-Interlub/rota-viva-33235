@@ -72,10 +72,34 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
 
     setIsProcessing(true);
     try {
-      // Buscar paradas da rota original
+      // Primeiro otimizar a rota completa
+      toast({
+        title: "Otimizando",
+        description: "Otimizando a rota completa antes de dividir...",
+      });
+
+      const { data: optimizeData, error: optimizeError } = await supabase.functions.invoke('optimize-route', {
+        body: { route_id: route.id }
+      });
+
+      if (optimizeError) {
+        console.error('Erro ao otimizar:', optimizeError);
+        toast({
+          title: "Aviso",
+          description: "Não foi possível otimizar a rota, mas continuaremos com a divisão.",
+          variant: "destructive",
+        });
+      } else if (optimizeData?.optimized) {
+        toast({
+          title: "Rota Otimizada",
+          description: "Rota otimizada com sucesso! Agora dividindo...",
+        });
+      }
+
+      // Buscar paradas da rota original (já otimizadas)
       const { data: stops, error: stopsError } = await supabase
         .from('route_stops')
-        .select('*, customers(name)')
+        .select('*, customers(name, address, city, state)')
         .eq('route_id', route.id)
         .order('stop_number');
 
@@ -143,12 +167,15 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
   };
 
   const proximitySplit = async (stops: any[]) => {
-    // Implementação simplificada - na prática seria com API de geolocalização
+    // Divide mantendo a sequência otimizada, agrupando paradas consecutivas
     const groups: any[][] = Array.from({ length: numberOfSplits }, () => []);
+    const stopsPerGroup = Math.ceil(stops.length / numberOfSplits);
     
     stops.forEach((stop, index) => {
-      const groupIndex = index % numberOfSplits;
-      groups[groupIndex].push(stop);
+      const groupIndex = Math.floor(index / stopsPerGroup);
+      if (groupIndex < numberOfSplits) {
+        groups[groupIndex].push(stop);
+      }
     });
 
     return groups.filter(group => group.length > 0);

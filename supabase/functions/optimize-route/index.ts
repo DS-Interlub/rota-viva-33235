@@ -64,19 +64,21 @@ serve(async (req) => {
       );
     }
 
-    // Preparar endereços para otimização
-    const addresses = route.route_stops.map((stop: any) => {
+    // Endereço da base
+    const BASE_ADDRESS = 'Av. Humberto de Alencar Castelo Branco, 1260 - Jardim Santo Ignacio, São Bernardo do Campo - SP, 09850-300';
+    
+    // Preparar endereços dos clientes para otimização
+    const customerAddresses = route.route_stops.map((stop: any) => {
       const customer = stop.customers;
       return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
     });
 
-    console.log('Endereços para otimização:', addresses);
+    console.log('Endereços dos clientes para otimização:', customerAddresses);
 
-    // Usar Google Maps Directions API para otimizar a rota
-    // Pegamos o primeiro endereço como origem e o último como destino
-    const origin = addresses[0];
-    const destination = addresses[addresses.length - 1];
-    const waypoints = addresses.slice(1, -1);
+    // A rota sempre começa e termina na base
+    const origin = BASE_ADDRESS;
+    const destination = BASE_ADDRESS;
+    const waypoints = customerAddresses;
 
     const waypointsParam = waypoints.length > 0 
       ? `&waypoints=optimize:true|${waypoints.join('|')}` 
@@ -110,15 +112,10 @@ serve(async (req) => {
     console.log('Ordem otimizada:', optimizedOrder);
 
     // Reorganizar as paradas de acordo com a ordem otimizada
-    const optimizedStops = [route.route_stops[0]]; // Primeiro sempre é o início
-    
-    optimizedOrder.forEach((waypointIndex: number) => {
-      optimizedStops.push(route.route_stops[waypointIndex + 1]); // +1 porque removemos o primeiro
+    // A ordem otimizada agora reflete todos os clientes (sem a base no início/fim)
+    const optimizedStops = optimizedOrder.map((waypointIndex: number) => {
+      return route.route_stops[waypointIndex];
     });
-    
-    if (route.route_stops.length > 1) {
-      optimizedStops.push(route.route_stops[route.route_stops.length - 1]); // Último sempre é o fim
-    }
 
     // Atualizar os números das paradas no banco de dados
     const updatePromises = optimizedStops.map((stop: any, index: number) => {
@@ -146,7 +143,7 @@ serve(async (req) => {
         total_distance_km: Math.round(totalDistance * 10) / 10,
         total_duration_min: Math.round(totalDuration),
         optimized_order: optimizedOrder,
-        google_maps_url: `https://www.google.com/maps/dir/${addresses.join('/')}`,
+        google_maps_url: `https://www.google.com/maps/dir/${encodeURIComponent(BASE_ADDRESS)}/${customerAddresses.join('/')}/${encodeURIComponent(BASE_ADDRESS)}`,
         waze_url: `https://waze.com/ul?ll=${leg?.start_location.lat},${leg?.start_location.lng}&navigate=yes`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
