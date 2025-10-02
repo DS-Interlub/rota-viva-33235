@@ -20,16 +20,39 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
 
   const templates = {
     customers: {
-      headers: ['name', 'address', 'city', 'state', 'zip_code', 'phone', 'email', 'is_transporter'],
-      example: 'Cliente Exemplo,Rua Exemplo 123,São Paulo,SP,01234-567,11999887766,cliente@exemplo.com,false'
+      headers: ['Nome', 'Endereço', 'Cidade', 'Estado', 'CEP', 'Telefone', 'E-mail', 'É transportadora'],
+      example: ['Cliente Exemplo', 'Rua Exemplo, 123', 'São Paulo', 'SP', '01234-567', '(11) 98765-4321', 'cliente@exemplo.com', 'N'],
+      dbMapping: {
+        'Nome': 'name',
+        'Endereço': 'address',
+        'Cidade': 'city',
+        'Estado': 'state',
+        'CEP': 'zip_code',
+        'Telefone': 'phone',
+        'E-mail': 'email',
+        'É transportadora': 'is_transporter'
+      }
     },
     drivers: {
-      headers: ['name', 'email', 'phone', 'license_number'],
-      example: 'João Silva,joao@email.com,11999887766,12345678901'
+      headers: ['Nome', 'E-mail', 'Telefone', 'CNH'],
+      example: ['João Silva', 'joao@email.com', '(11) 98765-4321', '12345678901'],
+      dbMapping: {
+        'Nome': 'name',
+        'E-mail': 'email',
+        'Telefone': 'phone',
+        'CNH': 'license_number'
+      }
     },
     vehicles: {
-      headers: ['plate', 'brand', 'model', 'year', 'km_current'],
-      example: 'ABC-1234,Ford,Transit,2020,50000'
+      headers: ['Placa', 'Marca', 'Modelo', 'Ano', 'KM Atual'],
+      example: ['ABC-1234', 'Ford', 'Transit', '2020', '50000'],
+      dbMapping: {
+        'Placa': 'plate',
+        'Marca': 'brand',
+        'Modelo': 'model',
+        'Ano': 'year',
+        'KM Atual': 'km_current'
+      }
     }
   };
 
@@ -37,14 +60,14 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
     const template = templates[type];
     const csv = [
       template.headers.join(','),
-      template.example
+      template.example.join(',')
     ].join('\n');
     
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `template_${type}.csv`;
+    a.download = `modelo_${getTypeName().toLowerCase()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -74,7 +97,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
     });
   };
 
-  const validateData = (data: string[][], headers: string[]): {valid: any[], errors: string[]} => {
+  const validateData = (data: string[][], headers: string[], dbMapping: any): {valid: any[], errors: string[]} => {
     const valid = [];
     const errors = [];
     
@@ -90,50 +113,41 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
       let hasError = false;
 
       for (let j = 0; j < headers.length; j++) {
-        const header = headers[j];
+        const displayHeader = headers[j];
+        const dbField = dbMapping[displayHeader];
         const value = row[j]?.trim();
 
-        switch (header) {
-          case 'name':
-          case 'address':
-            if (!value) {
-              errors.push(`Linha ${i + 1}: ${header} é obrigatório`);
+        // Validações específicas por campo do banco
+        if (dbField === 'name' || dbField === 'address' || dbField === 'plate') {
+          if (!value) {
+            errors.push(`Linha ${i + 1}: ${displayHeader} é obrigatório`);
+            hasError = true;
+          } else {
+            item[dbField] = value;
+          }
+        } else if (dbField === 'email') {
+          if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            errors.push(`Linha ${i + 1}: E-mail inválido`);
+            hasError = true;
+          } else {
+            item[dbField] = value || null;
+          }
+        } else if (dbField === 'year' || dbField === 'km_current') {
+          if (value) {
+            const num = parseInt(value);
+            if (isNaN(num)) {
+              errors.push(`Linha ${i + 1}: ${displayHeader} deve ser um número`);
               hasError = true;
             } else {
-              item[header] = value;
+              item[dbField] = num;
             }
-            break;
-          
-          case 'email':
-            if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-              errors.push(`Linha ${i + 1}: Email inválido`);
-              hasError = true;
-            } else {
-              item[header] = value || null;
-            }
-            break;
-          
-          case 'year':
-          case 'km_current':
-            if (value) {
-              const num = parseInt(value);
-              if (isNaN(num)) {
-                errors.push(`Linha ${i + 1}: ${header} deve ser um número`);
-                hasError = true;
-              } else {
-                item[header] = num;
-              }
-            } else {
-              item[header] = header === 'km_current' ? 0 : null;
-            }
-            break;
-          
-          case 'is_transporter':
-            item[header] = value === 'true' || value === '1';
-            break;
-          
-          default:
-            item[header] = value || null;
+          } else {
+            item[dbField] = dbField === 'km_current' ? 0 : null;
+          }
+        } else if (dbField === 'is_transporter') {
+          item[dbField] = value.toUpperCase() === 'S' || value.toLowerCase() === 'sim' || value === '1' || value.toLowerCase() === 'true';
+        } else {
+          item[dbField] = value || null;
         }
       }
 
@@ -170,7 +184,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
       }
 
       const template = templates[type];
-      const { valid, errors } = validateData(data, template.headers);
+      const { valid, errors } = validateData(data, template.headers, template.dbMapping);
 
       if (valid.length === 0) {
         setResults({success: 0, errors});
