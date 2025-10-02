@@ -20,10 +20,10 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
 
   const templates = {
     customers: {
-      headers: ['Nome', 'Endereço', 'Cidade', 'Estado', 'CEP', 'Telefone', 'E-mail', 'É transportadora'],
+      headers: ['Nome do Cliente', 'Endereço', 'Cidade', 'Estado', 'CEP', 'Telefone', 'E-mail', 'É transportadora'],
       example: ['Cliente Exemplo', 'Rua Exemplo, 123', 'São Paulo', 'SP', '01234-567', '(11) 98765-4321', 'cliente@exemplo.com', 'N'],
       dbMapping: {
-        'Nome': 'name',
+        'Nome do Cliente': 'name',
         'Endereço': 'address',
         'Cidade': 'city',
         'Estado': 'state',
