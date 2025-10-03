@@ -190,6 +190,7 @@ export type Database = {
           material_description: string | null
           notes: string | null
           photos: string[] | null
+          priority: number | null
           receiver_department: string | null
           receiver_email: string | null
           receiver_name: string | null
@@ -211,6 +212,7 @@ export type Database = {
           material_description?: string | null
           notes?: string | null
           photos?: string[] | null
+          priority?: number | null
           receiver_department?: string | null
           receiver_email?: string | null
           receiver_name?: string | null
@@ -232,6 +234,7 @@ export type Database = {
           material_description?: string | null
           notes?: string | null
           photos?: string[] | null
+          priority?: number | null
           receiver_department?: string | null
           receiver_email?: string | null
           receiver_name?: string | null

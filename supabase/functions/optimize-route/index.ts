@@ -21,10 +21,21 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { route_id } = await req.json();
+    const { route_id, priorities } = await req.json();
 
     if (!route_id) {
       throw new Error('route_id é obrigatório');
+    }
+
+    // Se priorities foi passado, atualizar antes de otimizar
+    if (priorities && typeof priorities === 'object') {
+      for (const [stopId, priority] of Object.entries(priorities)) {
+        await supabase
+          .from('route_stops')
+          .update({ priority: priority as number })
+          .eq('id', stopId);
+      }
+      console.log('Prioridades atualizadas:', priorities);
     }
 
     console.log('Otimizando rota:', route_id);
@@ -37,6 +48,7 @@ serve(async (req) => {
         route_stops(
           id,
           stop_number,
+          priority,
           customers(
             id,
             name,
@@ -67,12 +79,21 @@ serve(async (req) => {
     // Endereço da base
     const BASE_ADDRESS = 'Av. Humberto de Alencar Castelo Branco, 1260 - Jardim Santo Ignacio, São Bernardo do Campo - SP, 09850-300';
     
+    // Separar paradas por prioridade (3=Urgente, 2=Alta, 1=Baixa, 0=Normal)
+    const urgentStops = route.route_stops.filter((s: any) => s.priority === 3);
+    const highStops = route.route_stops.filter((s: any) => s.priority === 2);
+    const normalStops = route.route_stops.filter((s: any) => s.priority === 0 || s.priority === 1);
+
+    // Concatenar na ordem de prioridade
+    const orderedStops = [...urgentStops, ...highStops, ...normalStops];
+    
     // Preparar endereços dos clientes para otimização
-    const customerAddresses = route.route_stops.map((stop: any) => {
+    const customerAddresses = orderedStops.map((stop: any) => {
       const customer = stop.customers;
       return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
     });
 
+    console.log('Paradas por prioridade - Urgente:', urgentStops.length, 'Alta:', highStops.length, 'Normal:', normalStops.length);
     console.log('Endereços dos clientes para otimização:', customerAddresses);
 
     // A rota sempre começa e termina na base
@@ -114,7 +135,7 @@ serve(async (req) => {
     // Reorganizar as paradas de acordo com a ordem otimizada
     // A ordem otimizada agora reflete todos os clientes (sem a base no início/fim)
     const optimizedStops = optimizedOrder.map((waypointIndex: number) => {
-      return route.route_stops[waypointIndex];
+      return orderedStops[waypointIndex];
     });
 
     // Atualizar os números das paradas no banco de dados

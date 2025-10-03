@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Zap, MapPin, Clock, ExternalLink, Loader2 } from 'lucide-react';
+import { Zap, MapPin, Clock, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface RouteOptimizerProps {
   isOpen: boolean;
@@ -15,8 +17,66 @@ interface RouteOptimizerProps {
 
 export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }: RouteOptimizerProps) {
   const [loading, setLoading] = useState(false);
+  const [loadingStops, setLoadingStops] = useState(true);
   const [result, setResult] = useState<any>(null);
+  const [stops, setStops] = useState<any[]>([]);
+  const [priorities, setPriorities] = useState<{[key: string]: number}>({});
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (isOpen && routeId) {
+      fetchStops();
+    }
+  }, [isOpen, routeId]);
+
+  const fetchStops = async () => {
+    setLoadingStops(true);
+    try {
+      const { data, error } = await supabase
+        .from('route_stops')
+        .select('id, stop_number, priority, customers(name, address, city)')
+        .eq('route_id', routeId)
+        .order('stop_number');
+
+      if (error) throw error;
+      
+      setStops(data || []);
+      
+      // Inicializar prioridades com valores atuais
+      const initialPriorities: {[key: string]: number} = {};
+      data?.forEach(stop => {
+        initialPriorities[stop.id] = stop.priority || 0;
+      });
+      setPriorities(initialPriorities);
+    } catch (error) {
+      console.error('Erro ao buscar paradas:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as paradas da rota.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingStops(false);
+    }
+  };
+
+  const getPriorityLabel = (priority: number) => {
+    switch(priority) {
+      case 3: return 'Urgente';
+      case 2: return 'Alta';
+      case 1: return 'Baixa';
+      default: return 'Normal';
+    }
+  };
+
+  const getPriorityColor = (priority: number) => {
+    switch(priority) {
+      case 3: return 'text-red-600 font-semibold';
+      case 2: return 'text-orange-600 font-semibold';
+      case 1: return 'text-blue-600';
+      default: return 'text-gray-600';
+    }
+  };
 
   const handleOptimize = async () => {
     setLoading(true);
@@ -24,7 +84,10 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
 
     try {
       const { data, error } = await supabase.functions.invoke('optimize-route', {
-        body: { route_id: routeId }
+        body: { 
+          route_id: routeId,
+          priorities: priorities 
+        }
       });
 
       if (error) throw error;
@@ -53,6 +116,8 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
 
   const handleClose = () => {
     setResult(null);
+    setStops([]);
+    setPriorities({});
     onClose();
   };
 
@@ -71,37 +136,94 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
 
         <div className="space-y-4">
           {!result && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center justify-center space-y-4 text-center">
-                  <MapPin className="h-12 w-12 text-muted-foreground" />
-                  <div>
-                    <h3 className="font-semibold mb-2">Otimização Inteligente</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Vamos analisar todos os endereços e calcular a melhor rota para economizar tempo e combustível.
-                    </p>
+            <>
+              <Card className="border-blue-200 bg-blue-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-blue-900 mb-2">Configure as Prioridades</h4>
+                      <p className="text-sm text-blue-700">
+                        Defina a prioridade de cada entrega. O sistema otimizará a rota garantindo que entregas urgentes e de alta prioridade sejam feitas primeiro.
+                      </p>
+                    </div>
                   </div>
-                  <Button 
-                    onClick={handleOptimize} 
-                    disabled={loading}
-                    size="lg"
-                    className="w-full max-w-xs"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Otimizando...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="h-4 w-4 mr-2" />
-                        Iniciar Otimização
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {loadingStops ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="pt-6 space-y-4">
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {stops.map((stop) => (
+                        <div key={stop.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm">Parada {stop.stop_number}</span>
+                              <span className={`text-xs ${getPriorityColor(priorities[stop.id] || 0)}`}>
+                                {getPriorityLabel(priorities[stop.id] || 0)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {stop.customers?.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {stop.customers?.address}, {stop.customers?.city}
+                            </p>
+                          </div>
+                          <div className="w-32">
+                            <Select
+                              value={priorities[stop.id]?.toString() || '0'}
+                              onValueChange={(value) => setPriorities(prev => ({
+                                ...prev,
+                                [stop.id]: parseInt(value)
+                              }))}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">Normal</SelectItem>
+                                <SelectItem value="1">Baixa</SelectItem>
+                                <SelectItem value="2">Alta</SelectItem>
+                                <SelectItem value="3">Urgente</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <Button 
+                      onClick={handleOptimize} 
+                      disabled={loading}
+                      size="lg"
+                      className="w-full"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Otimizando...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Otimizar Rota
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {result && (
