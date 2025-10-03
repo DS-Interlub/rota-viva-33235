@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Upload, FileText, Download, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
 
 interface ImportExcelProps {
   isOpen: boolean;
@@ -58,18 +59,11 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
 
   const downloadTemplate = () => {
     const template = templates[type];
-    const csv = [
-      template.headers.join(';'),
-      template.example.join(';')
-    ].join('\n');
-    
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `modelo_${getTypeName().toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const wb = XLSX.utils.book_new();
+    const wsData = [template.headers, template.example];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, getTypeName());
+    XLSX.writeFile(wb, `modelo_${getTypeName().toLowerCase()}.xlsx`);
   };
 
   const parseCSV = (text: string): string[][] => {
@@ -173,10 +167,11 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext !== 'csv' && ext !== 'xlsx') {
       toast({
         title: "Erro",
-        description: "Por favor, selecione um arquivo CSV.",
+        description: "Por favor, selecione um arquivo Excel (.xlsx) ou CSV.",
         variant: "destructive",
       });
       return;
@@ -186,8 +181,19 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
     setResults({success: 0, errors: []});
 
     try {
-      const text = await file.text();
-      const data = parseCSV(text);
+      let data: any[][] = [];
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (ext === 'xlsx') {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[firstSheetName];
+        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+        data = aoa.map(row => row.map(cell => (cell === undefined || cell === null) ? '' : String(cell)));
+      } else {
+        const text = await file.text();
+        data = parseCSV(text);
+      }
       
       if (data.length < 2) {
         throw new Error('Arquivo vazio ou só contém cabeçalho');
@@ -266,7 +272,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
             </p>
             <Button variant="outline" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
-              Baixar modelo CSV
+              Baixar modelo Excel
             </Button>
           </div>
 
@@ -277,7 +283,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
               <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Clique para selecionar seu arquivo CSV
+                  Clique para selecionar seu arquivo Excel (.xlsx) ou CSV
                 </p>
                 <Button 
                   onClick={() => fileInputRef.current?.click()}
@@ -293,7 +299,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -339,7 +345,7 @@ export default function ImportExcel({ isOpen, onClose, onImportComplete, type }:
             <ul className="text-xs text-gray-600 mt-1 space-y-1">
               <li>• Use o modelo fornecido para garantir a formatação correta</li>
               <li>• Campos obrigatórios devem ser preenchidos</li>
-              <li>• Use vírgulas para separar as colunas</li>
+              <li>• Prefira a planilha Excel modelo; se usar CSV, verifique o delimitador (vírgula ou ponto e vírgula)</li>
               <li>• Para textos com vírgula, coloque entre aspas</li>
             </ul>
           </div>
