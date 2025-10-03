@@ -133,20 +133,34 @@ serve(async (req) => {
     console.log('Ordem otimizada:', optimizedOrder);
 
     // Reorganizar as paradas de acordo com a ordem otimizada
-    // A ordem otimizada agora reflete todos os clientes (sem a base no início/fim)
-    const optimizedStops = optimizedOrder.map((waypointIndex: number) => {
-      return orderedStops[waypointIndex];
-    });
-
-    // Atualizar os números das paradas no banco de dados
-    const updatePromises = optimizedStops.map((stop: any, index: number) => {
+    // optimized_order contém os índices indicando qual parada deve ser visitada em cada posição
+    // Exemplo: [1,0,2,4,5,3] significa que a parada índice 1 deve ser a primeira, índice 0 a segunda, etc.
+    
+    console.log('Atualizando ordem das paradas no banco de dados...');
+    
+    // Criar um array de promessas para atualizar cada parada com seu novo stop_number
+    const updatePromises = optimizedOrder.map((originalIndex: number, newPosition: number) => {
+      const stop = orderedStops[originalIndex];
+      const newStopNumber = newPosition + 1;
+      
+      console.log(`Parada ${stop.id} (${stop.customers?.name}): ${stop.stop_number} -> ${newStopNumber}`);
+      
       return supabase
         .from('route_stops')
-        .update({ stop_number: index + 1 })
+        .update({ stop_number: newStopNumber })
         .eq('id', stop.id);
     });
 
-    await Promise.all(updatePromises);
+    const updateResults = await Promise.all(updatePromises);
+    
+    // Verificar se houve erros nas atualizações
+    const errors = updateResults.filter(result => result.error);
+    if (errors.length > 0) {
+      console.error('Erros ao atualizar paradas:', errors);
+      throw new Error('Erro ao atualizar ordem das paradas');
+    }
+    
+    console.log('Ordem das paradas atualizada com sucesso!');
 
     // Calcular distância e tempo total
     const leg = data.routes[0]?.legs[0];
