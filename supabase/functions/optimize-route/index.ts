@@ -138,8 +138,22 @@ serve(async (req) => {
     
     console.log('Atualizando ordem das paradas no banco de dados...');
     
-    // Criar um array de promessas para atualizar cada parada com seu novo stop_number
-    const updatePromises = optimizedOrder.map((originalIndex: number, newPosition: number) => {
+    // ETAPA 1: Mover todas as paradas para números temporários (negativos) para evitar conflitos de unique constraint
+    const tempUpdatePromises = optimizedOrder.map((originalIndex: number, newPosition: number) => {
+      const stop = orderedStops[originalIndex];
+      const tempStopNumber = -(newPosition + 1); // Usar números negativos temporários
+      
+      return supabase
+        .from('route_stops')
+        .update({ stop_number: tempStopNumber })
+        .eq('id', stop.id);
+    });
+
+    await Promise.all(tempUpdatePromises);
+    console.log('Etapa 1 concluída: paradas movidas para números temporários');
+    
+    // ETAPA 2: Atualizar para os números finais corretos
+    const finalUpdatePromises = optimizedOrder.map((originalIndex: number, newPosition: number) => {
       const stop = orderedStops[originalIndex];
       const newStopNumber = newPosition + 1;
       
@@ -151,7 +165,7 @@ serve(async (req) => {
         .eq('id', stop.id);
     });
 
-    const updateResults = await Promise.all(updatePromises);
+    const updateResults = await Promise.all(finalUpdatePromises);
     
     // Verificar se houve erros nas atualizações
     const errors = updateResults.filter(result => result.error);
