@@ -177,13 +177,20 @@ serve(async (req) => {
     console.log('Ordem das paradas atualizada com sucesso!');
 
     // Calcular distância e tempo total
-    const leg = data.routes[0]?.legs[0];
     const totalDistance = data.routes[0]?.legs.reduce((sum: number, leg: any) => sum + leg.distance.value, 0) / 1000; // em km
     const totalDuration = data.routes[0]?.legs.reduce((sum: number, leg: any) => sum + leg.duration.value, 0) / 60; // em minutos
 
     console.log('Rota otimizada com sucesso');
     console.log('Distância total:', totalDistance, 'km');
     console.log('Tempo total:', totalDuration, 'min');
+
+    // Construir URLs corretas para navegação
+    // Google Maps - formato: origin -> waypoints -> destination
+    const googleMapsWaypoints = customerAddresses.map(addr => encodeURIComponent(addr)).join('/');
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(BASE_ADDRESS)}&destination=${encodeURIComponent(BASE_ADDRESS)}&waypoints=${googleMapsWaypoints}&travelmode=driving`;
+    
+    // Waze - usar a base como ponto de partida
+    const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(BASE_ADDRESS)}&navigate=yes`;
 
     return new Response(
       JSON.stringify({
@@ -192,8 +199,8 @@ serve(async (req) => {
         total_distance_km: Math.round(totalDistance * 10) / 10,
         total_duration_min: Math.round(totalDuration),
         optimized_order: optimizedOrder,
-        google_maps_url: `https://www.google.com/maps/dir/${encodeURIComponent(BASE_ADDRESS)}/${customerAddresses.join('/')}/${encodeURIComponent(BASE_ADDRESS)}`,
-        waze_url: `https://waze.com/ul?ll=${leg?.start_location.lat},${leg?.start_location.lng}&navigate=yes`
+        google_maps_url: googleMapsUrl,
+        waze_url: wazeUrl
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -910,7 +910,7 @@ onClick={() => setSelectedRouteForAssignment(route)}
                         variant="outline" 
                         size="sm" 
                         onClick={() => setSelectedRouteForSplit(route)}
-                        disabled={route.status === 'draft'}
+                        disabled={route.status === 'completed' || route.status === 'split' || !route.route_stops || route.route_stops.length < 2}
                       >
                         <Split className="h-3 w-3 mr-1" />
                         Dividir
