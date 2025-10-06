@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Split, MapPin, Clock, Users, Truck, Zap, Merge } from 'lucide-react';
+import { Split, MapPin, Clock, Users, Truck, Zap, Merge, Route as RouteIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -19,7 +19,7 @@ interface RouteSplitterProps {
 }
 
 export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: RouteSplitterProps) => {
-  const [splitType, setSplitType] = useState<'manual' | 'proximity' | 'capacity' | 'stops' | 'time'>('manual');
+  const [splitType, setSplitType] = useState<'distance' | 'manual' | 'proximity' | 'capacity' | 'stops' | 'time'>('distance');
   const [numberOfSplits, setNumberOfSplits] = useState(2);
   const [selectedStops, setSelectedStops] = useState<{[key: string]: string}>({});
   const [availableDrivers, setAvailableDrivers] = useState<string[]>([]);
@@ -28,6 +28,12 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
   const { toast } = useToast();
 
   const splitOptions = [
+    {
+      id: 'distance',
+      title: 'Por Distância',
+      description: 'Divide equilibrando a quilometragem a partir da base',
+      icon: RouteIcon
+    },
     {
       id: 'manual',
       title: 'Divisão Manual',
@@ -108,6 +114,9 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
       let groupedStops: any[][] = [];
 
       switch (splitType) {
+        case 'distance':
+          groupedStops = await distanceSplit(stops);
+          break;
         case 'manual':
           groupedStops = await manualSplit(stops);
           break;
@@ -263,6 +272,23 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
     }
 
     return optimizedGroups;
+  };
+
+  const distanceSplit = async (stops: any[]) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('split-route', {
+        body: { route_id: route.id, number_of_splits: numberOfSplits }
+      });
+      if (error || !data?.groups) {
+        console.error('Erro no split-route:', error, data);
+        return await proximitySplit(stops);
+      }
+      const idToStop: Record<string, any> = Object.fromEntries(stops.map((s: any) => [s.id, s]));
+      return data.groups.map((groupIds: string[]) => groupIds.map((id: string) => idToStop[id]).filter(Boolean));
+    } catch (e) {
+      console.error('Exceção no split-route:', e);
+      return await proximitySplit(stops);
+    }
   };
 
   const stopsSplit = async (stops: any[]) => {
