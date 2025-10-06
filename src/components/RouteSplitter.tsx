@@ -178,7 +178,91 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
       }
     });
 
-    return groups.filter(group => group.length > 0);
+    // Otimizar cada grupo individualmente após divisão
+    const optimizedGroups = [];
+    
+    for (const group of groups.filter(g => g.length > 0)) {
+      if (group.length > 1) {
+        // Criar rota temporária para otimizar este grupo
+        const { data: tempRoute, error: routeError } = await supabase
+          .from('routes')
+          .insert({
+            route_date: route.route_date,
+            status: 'draft'
+          })
+          .select()
+          .single();
+
+        if (routeError) {
+          console.error('Erro ao criar rota temporária:', routeError);
+          optimizedGroups.push(group);
+          continue;
+        }
+
+        // Criar paradas temporárias
+        const tempStopsPromises = group.map((stop, index) =>
+          supabase
+            .from('route_stops')
+            .insert({
+              route_id: tempRoute.id,
+              customer_id: stop.customer_id,
+              stop_number: index + 1,
+              weight_kg: stop.weight_kg,
+              volume_m3: stop.volume_m3,
+              material_description: stop.material_description,
+              priority: stop.priority || 0
+            })
+            .select()
+        );
+
+        await Promise.all(tempStopsPromises);
+
+        // Otimizar este grupo
+        const { data: optimizeData, error: optimizeError } = await supabase.functions.invoke('optimize-route', {
+          body: { route_id: tempRoute.id }
+        });
+
+        if (!optimizeError && optimizeData?.optimized) {
+          // Buscar paradas otimizadas
+          const { data: optimizedStops } = await supabase
+            .from('route_stops')
+            .select('*, customers(*)')
+            .eq('route_id', tempRoute.id)
+            .order('stop_number');
+
+          if (optimizedStops) {
+            // Mapear de volta para o formato original do grupo
+            const mappedGroup = optimizedStops.map(optStop => {
+              const originalStop = group.find(s => s.customer_id === optStop.customer_id);
+              return {
+                ...originalStop,
+                stop_number: optStop.stop_number
+              };
+            });
+            optimizedGroups.push(mappedGroup);
+          } else {
+            optimizedGroups.push(group);
+          }
+        } else {
+          optimizedGroups.push(group);
+        }
+
+        // Limpar rota temporária
+        await supabase
+          .from('route_stops')
+          .delete()
+          .eq('route_id', tempRoute.id);
+        
+        await supabase
+          .from('routes')
+          .delete()
+          .eq('id', tempRoute.id);
+      } else {
+        optimizedGroups.push(group);
+      }
+    }
+
+    return optimizedGroups;
   };
 
   const stopsSplit = async (stops: any[]) => {

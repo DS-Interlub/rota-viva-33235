@@ -185,12 +185,20 @@ serve(async (req) => {
     console.log('Tempo total:', totalDuration, 'min');
 
     // Construir URLs corretas para navegação
-    // Google Maps - formato: origin -> waypoints -> destination
-    const googleMapsWaypoints = customerAddresses.map(addr => encodeURIComponent(addr)).join('/');
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(BASE_ADDRESS)}&destination=${encodeURIComponent(BASE_ADDRESS)}&waypoints=${googleMapsWaypoints}&travelmode=driving`;
+    // Google Maps - usar format correto com waypoints separados por pipe
+    const waypointsForUrl = optimizedOrder.map((originalIndex: number) => {
+      const stop = orderedStops[originalIndex];
+      const customer = stop.customers;
+      return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
+    }).map(addr => encodeURIComponent(addr)).join('|');
     
-    // Waze - usar a base como ponto de partida
-    const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(BASE_ADDRESS)}&navigate=yes`;
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(BASE_ADDRESS)}&destination=${encodeURIComponent(BASE_ADDRESS)}&waypoints=${waypointsForUrl}&travelmode=driving`;
+    
+    // Waze - iniciar navegação do primeiro ponto
+    const firstStop = orderedStops[optimizedOrder[0]];
+    const firstCustomer = firstStop.customers;
+    const firstAddress = `${firstCustomer.address}, ${firstCustomer.city || ''}, ${firstCustomer.state || ''}`.trim();
+    const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(firstAddress)}&navigate=yes`;
 
     return new Response(
       JSON.stringify({

@@ -911,6 +911,12 @@ onClick={() => setSelectedRouteForAssignment(route)}
                         size="sm" 
                         onClick={() => setSelectedRouteForSplit(route)}
                         disabled={route.status === 'completed' || route.status === 'split' || !route.route_stops || route.route_stops.length < 2}
+                        title={
+                          route.status === 'completed' ? 'Rota já foi completada' :
+                          route.status === 'split' ? 'Rota já foi dividida' :
+                          !route.route_stops || route.route_stops.length < 2 ? 'É necessário pelo menos 2 paradas' :
+                          'Dividir esta rota em múltiplas rotas'
+                        }
                       >
                         <Split className="h-3 w-3 mr-1" />
                         Dividir
