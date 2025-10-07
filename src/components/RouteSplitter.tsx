@@ -339,9 +339,20 @@ export const RouteSplitter = ({ route, drivers, vehicles, onClose, onUpdate }: R
   };
 
   const createSplitRoutes = async (groupedStops: any[][]) => {
-    for (let i = 0; i < groupedStops.length; i++) {
-      const group = groupedStops[i];
-      if (group.length === 0) continue;
+    // Filtrar grupos vazios antes de criar rotas
+    const validGroups = groupedStops.filter(group => group.length > 0);
+    
+    if (validGroups.length === 0) {
+      throw new Error('Nenhum grupo válido para criar rotas');
+    }
+
+    // Verificar se temos motoristas e veículos suficientes
+    if (availableDrivers.length < validGroups.length || availableVehicles.length < validGroups.length) {
+      throw new Error(`Selecione pelo menos ${validGroups.length} motoristas e veículos para as rotas divididas.`);
+    }
+
+    for (let i = 0; i < validGroups.length; i++) {
+      const group = validGroups[i];
 
       // Criar nova rota
       const { data: newRoute, error: routeError } = await supabase

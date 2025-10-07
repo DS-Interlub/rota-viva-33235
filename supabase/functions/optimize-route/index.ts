@@ -185,19 +185,18 @@ serve(async (req) => {
     console.log('Tempo total:', totalDuration, 'min');
 
     // Construir URLs corretas para navegação
-    // Google Maps - usar format correto com waypoints separados por pipe
-    const waypointsForUrl = optimizedOrder.map((originalIndex: number) => {
+    // Google Maps - usar formato de deeplink que funciona tanto web quanto app
+    const orderedAddresses = optimizedOrder.map((originalIndex: number) => {
       const stop = orderedStops[originalIndex];
       const customer = stop.customers;
       return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
-    }).map(addr => encodeURIComponent(addr)).join('|');
+    });
     
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(BASE_ADDRESS)}&destination=${encodeURIComponent(BASE_ADDRESS)}&waypoints=${waypointsForUrl}&travelmode=driving`;
+    // Construir URL: base -> paradas -> base
+    const googleMapsUrl = `https://www.google.com/maps/dir/${encodeURIComponent(BASE_ADDRESS)}/${orderedAddresses.map(a => encodeURIComponent(a)).join('/')}/${encodeURIComponent(BASE_ADDRESS)}`;
     
-    // Waze - iniciar navegação do primeiro ponto
-    const firstStop = orderedStops[optimizedOrder[0]];
-    const firstCustomer = firstStop.customers;
-    const firstAddress = `${firstCustomer.address}, ${firstCustomer.city || ''}, ${firstCustomer.state || ''}`.trim();
+    // Waze - navegar para o primeiro ponto da rota otimizada
+    const firstAddress = orderedAddresses[0];
     const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(firstAddress)}&navigate=yes`;
 
     return new Response(
