@@ -82,7 +82,7 @@ export default function Routes() {
         routesQuery,
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, plate, brand, model'),
-        supabase.from('customers').select('id, name, address')
+        supabase.from('customers').select('id, name, address').eq('is_transporter', false)
       ]);
 
       if (routesResult.error) throw routesResult.error;
