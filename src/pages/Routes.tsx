@@ -82,7 +82,7 @@ export default function Routes() {
         routesQuery,
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, plate, brand, model'),
-        supabase.from('customers').select('id, name, address').eq('is_transporter', false)
+        supabase.from('customers').select('id, name, address, city, state, transporter_id, transporter:transporter_id(id, name, address, city, state)').eq('is_transporter', false)
       ]);
 
       if (routesResult.error) throw routesResult.error;
@@ -518,7 +518,11 @@ export default function Routes() {
                             }}
                           />
                           <label htmlFor={`customer-${customer.id}`} className="text-sm cursor-pointer font-medium">
-                            {customer.name} - {customer.address}
+                            {customer.name} - {
+                              customer.transporter_id && customer.transporter 
+                                ? `${customer.transporter.address}, ${customer.transporter.city || ''}, ${customer.transporter.state || ''} (via ${customer.transporter.name})`
+                                : `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`
+                            }
                           </label>
                         </div>
                         
