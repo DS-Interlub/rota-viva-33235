@@ -19,12 +19,14 @@ export type Database = {
           address: string
           city: string | null
           created_at: string
+          delivery_notes: string | null
           email: string | null
           id: string
           is_transporter: boolean | null
           name: string
           phone: string | null
           state: string | null
+          transporter_id: string | null
           updated_at: string
           zip_code: string | null
         }
@@ -32,12 +34,14 @@ export type Database = {
           address: string
           city?: string | null
           created_at?: string
+          delivery_notes?: string | null
           email?: string | null
           id?: string
           is_transporter?: boolean | null
           name: string
           phone?: string | null
           state?: string | null
+          transporter_id?: string | null
           updated_at?: string
           zip_code?: string | null
         }
@@ -45,16 +49,26 @@ export type Database = {
           address?: string
           city?: string | null
           created_at?: string
+          delivery_notes?: string | null
           email?: string | null
           id?: string
           is_transporter?: boolean | null
           name?: string
           phone?: string | null
           state?: string | null
+          transporter_id?: string | null
           updated_at?: string
           zip_code?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_transporter_id_fkey"
+            columns: ["transporter_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       drivers: {
         Row: {

@@ -54,7 +54,13 @@ serve(async (req) => {
             name,
             address,
             city,
-            state
+            state,
+            transporter_id,
+            transporter:transporter_id(
+              address,
+              city,
+              state
+            )
           )
         )
       `)
@@ -88,8 +94,15 @@ serve(async (req) => {
     const orderedStops = [...urgentStops, ...highStops, ...normalStops];
     
     // Preparar endereços dos clientes para otimização
+    // Se o cliente tem transportadora, usar o endereço da transportadora
     const customerAddresses = orderedStops.map((stop: any) => {
       const customer = stop.customers;
+      // Se tem transportadora vinculada, usar o endereço dela
+      if (customer.transporter_id && customer.transporter) {
+        const transporter = customer.transporter;
+        return `${transporter.address}, ${transporter.city || ''}, ${transporter.state || ''}`.trim();
+      }
+      // Caso contrário, usar o endereço do cliente
       return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
     });
 

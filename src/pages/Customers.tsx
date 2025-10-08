@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Building, MapPin, Phone, Mail, Upload, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,7 +29,9 @@ export default function Customers() {
     zip_code: '',
     phone: '',
     email: '',
-    is_transporter: false
+    is_transporter: false,
+    transporter_id: null,
+    delivery_notes: ''
   });
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -43,7 +46,14 @@ export default function Customers() {
     try {
       const { data, error } = await supabase
         .from('customers')
-        .select('*')
+        .select(`
+          *,
+          transporter:transporter_id(
+            id,
+            name,
+            address
+          )
+        `)
         .order('name');
 
       if (error) throw error;
@@ -106,7 +116,9 @@ export default function Customers() {
         zip_code: '',
         phone: '',
         email: '',
-        is_transporter: false
+        is_transporter: false,
+        transporter_id: null,
+        delivery_notes: ''
       });
       fetchCustomers();
     } catch (error) {
@@ -129,7 +141,9 @@ export default function Customers() {
       zip_code: customer.zip_code || '',
       phone: customer.phone || '',
       email: customer.email || '',
-      is_transporter: customer.is_transporter || false
+      is_transporter: customer.is_transporter || false,
+      transporter_id: customer.transporter_id || null,
+      delivery_notes: customer.delivery_notes || ''
     });
     setIsDialogOpen(true);
   };
@@ -201,7 +215,9 @@ export default function Customers() {
                       zip_code: '',
                       phone: '',
                       email: '',
-                      is_transporter: false
+                      is_transporter: false,
+                      transporter_id: null,
+                      delivery_notes: ''
                     });
                   }}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -315,6 +331,37 @@ export default function Customers() {
                       />
                       <Label htmlFor="is_transporter">É transportadora</Label>
                     </div>
+                    {!formData.is_transporter && (
+                      <div>
+                        <Label htmlFor="transporter_id">Transportadora (opcional)</Label>
+                        <select
+                          id="transporter_id"
+                          value={formData.transporter_id || ''}
+                          onChange={(e) => setFormData({ ...formData, transporter_id: e.target.value || null })}
+                          className="w-full px-3 py-2 border border-input bg-background rounded-md"
+                        >
+                          <option value="">Sem transportadora</option>
+                          {customers.filter((c: any) => c.is_transporter).map((transporter: any) => (
+                            <option key={transporter.id} value={transporter.id}>
+                              {transporter.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Se selecionado, a entrega será feita no endereço da transportadora
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="delivery_notes">Observações de Entrega</Label>
+                      <Textarea
+                        id="delivery_notes"
+                        value={formData.delivery_notes}
+                        onChange={(e) => setFormData({ ...formData, delivery_notes: e.target.value })}
+                        placeholder="Ex: Horário de recebimento das 08:00 até as 15:00, portão azul..."
+                        rows={3}
+                      />
+                    </div>
                     <Button type="submit" className="w-full">
                       {editingCustomer ? 'Atualizar' : 'Cadastrar'}
                     </Button>
@@ -368,6 +415,20 @@ export default function Customers() {
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">{customer.address}</span>
                   </div>
+
+                  {customer.transporter && (
+                    <div className="text-sm p-2 bg-muted rounded">
+                      <span className="font-medium">Entrega via: </span>
+                      {customer.transporter.name}
+                    </div>
+                  )}
+
+                  {customer.delivery_notes && (
+                    <div className="text-sm p-2 bg-blue-50 dark:bg-blue-950 rounded">
+                      <span className="font-medium">Observações: </span>
+                      {customer.delivery_notes}
+                    </div>
+                  )}
                   
                   {customer.phone && (
                     <div className="flex items-center gap-2">

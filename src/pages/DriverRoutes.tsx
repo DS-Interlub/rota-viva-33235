@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { MapPin, Clock, CheckCircle, Camera, PenTool, Play, Square, Eye } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, Camera, PenTool, Play, Square, Eye, ArrowUp, ArrowDown, ListOrdered, Save, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,6 +44,7 @@ export default function DriverRoutes() {
   const [selectedImage, setSelectedImage] = useState<{src: string, alt: string, title: string} | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
   const [signedUrls, setSignedUrls] = useState<{[key: string]: string}>({});
+  const [reorderMode, setReorderMode] = useState<{routeId: string, stops: any[]} | null>(null);
   const { toast } = useToast();
   const { profile, user } = useAuth();
 
@@ -61,7 +62,16 @@ export default function DriverRoutes() {
           vehicles(plate, brand, model),
           route_stops(
             *,
-            customers(name, address)
+            customers(
+              name, 
+              address,
+              delivery_notes,
+              transporter_id,
+              transporter:transporter_id(
+                name,
+                address
+              )
+            )
           )
         `)
         .eq('driver_id', profile.driver_id);
@@ -337,6 +347,58 @@ export default function DriverRoutes() {
     setSelectedImage({ src: signedUrl, alt, title });
   };
 
+  const startReorderMode = (route: any) => {
+    const sortedStops = [...route.route_stops].sort((a, b) => a.stop_number - b.stop_number);
+    setReorderMode({ routeId: route.id, stops: sortedStops });
+  };
+
+  const moveStop = (fromIndex: number, toIndex: number) => {
+    if (!reorderMode) return;
+    
+    const newStops = [...reorderMode.stops];
+    const [movedStop] = newStops.splice(fromIndex, 1);
+    newStops.splice(toIndex, 0, movedStop);
+    
+    // Atualizar stop_number de todas as paradas
+    const updatedStops = newStops.map((stop, index) => ({
+      ...stop,
+      stop_number: index + 1
+    }));
+    
+    setReorderMode({ ...reorderMode, stops: updatedStops });
+  };
+
+  const saveReorderedRoute = async () => {
+    if (!reorderMode) return;
+
+    try {
+      // Atualizar ordem das paradas no banco
+      for (const stop of reorderMode.stops) {
+        const { error } = await supabase
+          .from('route_stops')
+          .update({ stop_number: stop.stop_number })
+          .eq('id', stop.id);
+        
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Rota reordenada",
+        description: "A ordem das paradas foi atualizada com sucesso!",
+      });
+
+      setReorderMode(null);
+      fetchDriverRoutes();
+    } catch (error) {
+      console.error('Erro ao reordenar rota:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível reordenar a rota.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredRoutes = useMemo(() => {
     return routes;
   }, [routes]);
@@ -405,10 +467,31 @@ export default function DriverRoutes() {
                       </Button>
                     )}
                     {route.status === 'in_progress' && (
-                      <Button size="sm" variant="outline" onClick={() => openKmDialog(route, 'complete')}>
-                        <Square className="h-4 w-4 mr-1" />
-                        Finalizar
-                      </Button>
+                      <>
+                        {reorderMode?.routeId === route.id ? (
+                          <>
+                            <Button size="sm" variant="default" onClick={saveReorderedRoute}>
+                              <Save className="h-4 w-4 mr-1" />
+                              Salvar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setReorderMode(null)}>
+                              <X className="h-4 w-4 mr-1" />
+                              Cancelar
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="secondary" onClick={() => startReorderMode(route)}>
+                              <ListOrdered className="h-4 w-4 mr-1" />
+                              Reordenar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => openKmDialog(route, 'complete')}>
+                              <Square className="h-4 w-4 mr-1" />
+                              Finalizar
+                            </Button>
+                          </>
+                        )}
+                      </>
                     )}
                     <Button 
                       size="sm" 
@@ -441,11 +524,15 @@ export default function DriverRoutes() {
 
                       {route.route_stops && route.route_stops.length > 0 && expandedRoutes.has(route.id) && (
                         <div>
-                          <h4 className="font-semibold mb-2">Entregas:</h4>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold">Entregas:</h4>
+                            {reorderMode?.routeId === route.id && (
+                              <Badge variant="secondary">Modo de Reordenação Ativo</Badge>
+                            )}
+                          </div>
                           <div className="space-y-3">
-                            {route.route_stops
-                              .sort((a: any, b: any) => a.stop_number - b.stop_number)
-                              .map((stop: any) => (
+                            {(reorderMode?.routeId === route.id ? reorderMode.stops : route.route_stops.sort((a: any, b: any) => a.stop_number - b.stop_number))
+                              .map((stop: any, index: number) => (
                               <div
                                 key={stop.id}
                                 className={`rounded-lg border ${
@@ -455,26 +542,58 @@ export default function DriverRoutes() {
                                 }`}
                               >
                                 <div className="flex items-center justify-between p-3">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium">#{stop.stop_number}</span>
-                                      <span>{stop.customers?.name}</span>
-                                      {stop.completed && <CheckCircle className="h-4 w-4 text-green-600" />}
-                                    </div>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                      {stop.customers?.address}
-                                    </p>
-                                  </div>
-                                  {route.status === 'in_progress' && !stop.completed && (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => openStopDialog(route, stop)}
-                                    >
-                                      <CheckCircle className="h-4 w-4 mr-1" />
-                                      Entregar
-                                    </Button>
-                                  )}
-                                </div>
+                                   <div className="flex-1">
+                                     <div className="flex items-center gap-2">
+                                       <span className="font-medium">#{stop.stop_number}</span>
+                                       <span>{stop.customers?.name}</span>
+                                       {stop.completed && <CheckCircle className="h-4 w-4 text-green-600" />}
+                                     </div>
+                                     <p className="text-sm text-muted-foreground mt-1">
+                                       {stop.customers?.address}
+                                     </p>
+                                     {stop.customers?.transporter_id && stop.customers?.transporter && (
+                                       <p className="text-sm text-blue-600 mt-1">
+                                         🚚 Entrega via: {stop.customers.transporter.name}
+                                       </p>
+                                     )}
+                                     {stop.customers?.delivery_notes && (
+                                       <p className="text-sm bg-yellow-50 dark:bg-yellow-950 p-2 rounded mt-2">
+                                         ℹ️ {stop.customers.delivery_notes}
+                                       </p>
+                                     )}
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                     {reorderMode?.routeId === route.id && !stop.completed && (
+                                       <div className="flex flex-col gap-1">
+                                         <Button
+                                           size="sm"
+                                           variant="outline"
+                                           disabled={index === 0}
+                                           onClick={() => moveStop(index, index - 1)}
+                                         >
+                                           <ArrowUp className="h-3 w-3" />
+                                         </Button>
+                                         <Button
+                                           size="sm"
+                                           variant="outline"
+                                           disabled={index === (reorderMode?.stops.length || 0) - 1}
+                                           onClick={() => moveStop(index, index + 1)}
+                                         >
+                                           <ArrowDown className="h-3 w-3" />
+                                         </Button>
+                                       </div>
+                                     )}
+                                     {route.status === 'in_progress' && !stop.completed && !reorderMode && (
+                                       <Button
+                                         size="sm"
+                                         onClick={() => openStopDialog(route, stop)}
+                                       >
+                                         <CheckCircle className="h-4 w-4 mr-1" />
+                                         Entregar
+                                       </Button>
+                                     )}
+                                   </div>
+                                 </div>
                                 
                                 {/* Detalhes da entrega quando completada */}
                                 {stop.completed && (
