@@ -121,6 +121,19 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
     onClose();
   };
 
+  const openExternal = (url: string) => {
+    try {
+      if (window.top && window.top !== window.self) {
+        // Quebra o iframe do preview para evitar bloqueio do Google
+        window.top.location.href = url;
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      window.location.href = url;
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
@@ -259,7 +272,7 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(result.google_maps_url, '_blank')}
+                    onClick={() => openExternal(result.google_maps_url)}
                     className="w-full"
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
@@ -268,7 +281,7 @@ export default function RouteOptimizer({ isOpen, onClose, routeId, onOptimized }
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(result.waze_url, '_blank')}
+                    onClick={() => openExternal(result.waze_url)}
                     className="w-full"
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />

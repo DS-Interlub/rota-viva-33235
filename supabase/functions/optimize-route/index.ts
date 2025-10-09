@@ -114,11 +114,12 @@ serve(async (req) => {
     const destination = BASE_ADDRESS;
     const waypoints = customerAddresses;
 
+    const encodedWaypoints = waypoints.map((w) => encodeURIComponent(w)).join('|');
     const waypointsParam = waypoints.length > 0 
-      ? `&waypoints=optimize:true|${waypoints.join('|')}` 
+      ? `&waypoints=optimize:true|${encodedWaypoints}` 
       : '';
-
-    const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsParam}&key=${GOOGLE_MAPS_API_KEY}`;
+ 
+    const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsParam}&language=pt-BR&region=BR&key=${GOOGLE_MAPS_API_KEY}`;
 
     console.log('Chamando Google Maps API...');
     
