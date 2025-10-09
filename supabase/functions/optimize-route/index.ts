@@ -202,6 +202,12 @@ serve(async (req) => {
     const orderedAddresses = optimizedOrder.map((originalIndex: number) => {
       const stop = orderedStops[originalIndex];
       const customer = stop.customers;
+      // Se tem transportadora vinculada, usar o endereço dela
+      if (customer.transporter_id && customer.transporter) {
+        const transporter = customer.transporter;
+        return `${transporter.address}, ${transporter.city || ''}, ${transporter.state || ''}`.trim();
+      }
+      // Caso contrário, usar o endereço do cliente
       return `${customer.address}, ${customer.city || ''}, ${customer.state || ''}`.trim();
     });
     
